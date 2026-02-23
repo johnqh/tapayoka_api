@@ -1,0 +1,71 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { eq, and } from "drizzle-orm";
+import { getDb } from "../../db/index.ts";
+import { devices, deviceServices, services } from "../../db/schema.ts";
+import { verifySignature } from "../../services/crypto.ts";
+import { deviceVerifySchema } from "../../schemas/index.ts";
+import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+
+const buyerDevices = new Hono();
+
+/**
+ * POST /verify - Verify device signature and get available services
+ * Buyer sends device's signed challenge; server verifies and returns services.
+ */
+buyerDevices.post(
+  "/verify",
+  zValidator("json", deviceVerifySchema),
+  async c => {
+    const { deviceWalletAddress, signedPayload, signature } =
+      c.req.valid("json");
+
+    // Verify the device's signature
+    const isValid = verifySignature(
+      signedPayload,
+      signature,
+      deviceWalletAddress
+    );
+    if (!isValid) {
+      return c.json(errorResponse("Invalid device signature"), 400);
+    }
+
+    const db = getDb();
+
+    // Find the device
+    const [device] = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.walletAddress, deviceWalletAddress))
+      .limit(1);
+
+    if (!device) {
+      return c.json(errorResponse("Device not registered"), 404);
+    }
+
+    if (device.status !== "ACTIVE") {
+      return c.json(errorResponse("Device is not active"), 400);
+    }
+
+    // Get assigned services
+    const assignedServices = await db
+      .select({ service: services })
+      .from(deviceServices)
+      .innerJoin(services, eq(deviceServices.serviceId, services.id))
+      .where(
+        and(
+          eq(deviceServices.deviceWalletAddress, deviceWalletAddress),
+          eq(services.active, true)
+        )
+      );
+
+    return c.json(
+      successResponse({
+        device,
+        services: assignedServices.map(r => r.service),
+      })
+    );
+  }
+);
+
+export default buyerDevices;

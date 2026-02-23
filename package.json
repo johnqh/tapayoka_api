@@ -1,0 +1,47 @@
+{
+  "name": "tapayoka_api",
+  "version": "0.0.1",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "license": "BUSL-1.1",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "start:prod": "bun run dist/index.js",
+    "test": "vitest run tests/",
+    "test:watch": "vitest tests/",
+    "lint": "bunx eslint src",
+    "typecheck": "bunx tsc --noEmit",
+    "format": "bunx prettier --write src",
+    "format:check": "bunx prettier --check src",
+    "db:migrate": "bun run src/db/migrate.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.2",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.4"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.5",
+    "@sudobility/auth_service": "^1.1.9",
+    "@sudobility/entity_service": "^1.0.25",
+    "@sudobility/tapayoka_types": "^0.0.1",
+    "@sudobility/types": "^1.9.54",
+    "drizzle-orm": "^0.45.0",
+    "ethers": "^6.13.0",
+    "firebase-admin": "^13.6.0",
+    "hono": "^4.10.7",
+    "postgres": "^3.4.7",
+    "stripe": "^17.0.0",
+    "zod": "^3.24.0"
+  }
+}

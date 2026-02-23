@@ -1,0 +1,197 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { eq } from "drizzle-orm";
+import { getDb } from "../../db/index.ts";
+import { orders, services, devices } from "../../db/schema.ts";
+import {
+  createOrderSchema,
+  processPaymentSchema,
+  uuidSchema,
+} from "../../schemas/index.ts";
+import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
+import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import type { ServiceType } from "@sudobility/tapayoka_types";
+
+const buyerOrders = new Hono();
+
+/** Calculate authorized seconds based on service type and amount */
+function calculateAuthorizedSeconds(
+  type: ServiceType,
+  amountCents: number,
+  fixedMinutes: number | null,
+  minutesPer25c: number | null
+): number {
+  switch (type) {
+    case "TRIGGER":
+      return 0; // Instant activation, no duration
+    case "FIXED":
+      return (fixedMinutes ?? 0) * 60;
+    case "VARIABLE":
+      if (!minutesPer25c) return 0;
+      return Math.floor(amountCents / 25) * minutesPer25c * 60;
+  }
+}
+
+/** Valid order status transitions */
+const validTransitions: Record<string, string[]> = {
+  CREATED: ["PAID", "FAILED"],
+  PAID: ["AUTHORIZED", "FAILED"],
+  AUTHORIZED: ["RUNNING", "FAILED"],
+  RUNNING: ["DONE", "FAILED"],
+};
+
+/**
+ * POST / - Create a new order
+ */
+buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
+  const { deviceWalletAddress, serviceId, amountCents } = c.req.valid("json");
+  const buyerUid = c.get("firebaseUid") as string;
+
+  const db = getDb();
+
+  // Validate device exists and is active
+  const [device] = await db
+    .select()
+    .from(devices)
+    .where(eq(devices.walletAddress, deviceWalletAddress))
+    .limit(1);
+
+  if (!device || device.status !== "ACTIVE") {
+    return c.json(errorResponse("Device not found or inactive"), 404);
+  }
+
+  // Validate service exists and is active
+  const [service] = await db
+    .select()
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .limit(1);
+
+  if (!service || !service.active) {
+    return c.json(errorResponse("Service not found or inactive"), 404);
+  }
+
+  // Validate amount matches service price
+  if (amountCents < service.priceCents) {
+    return c.json(
+      errorResponse(
+        `Amount ${amountCents} is less than service price ${service.priceCents}`
+      ),
+      400
+    );
+  }
+
+  const authorizedSeconds = calculateAuthorizedSeconds(
+    service.type as ServiceType,
+    amountCents,
+    service.fixedMinutes,
+    service.minutesPer25c
+  );
+
+  // Create order
+  const [order] = await db
+    .insert(orders)
+    .values({
+      deviceWalletAddress,
+      serviceId,
+      buyerUid,
+      amountCents,
+      authorizedSeconds,
+    })
+    .returning();
+
+  return c.json(successResponse(order), 201);
+});
+
+/**
+ * GET /:id - Get order by ID
+ */
+buyerOrders.get("/:id", async c => {
+  const orderId = c.req.param("id");
+  const parsed = uuidSchema.safeParse(orderId);
+  if (!parsed.success) {
+    return c.json(errorResponse("Invalid order ID"), 400);
+  }
+
+  const db = getDb();
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+
+  if (!order) {
+    return c.json(errorResponse("Order not found"), 404);
+  }
+
+  return c.json(successResponse(order));
+});
+
+/**
+ * POST /:id/pay - Process payment for an order
+ */
+buyerOrders.post(
+  "/:id/pay",
+  zValidator("json", processPaymentSchema),
+  async c => {
+    const { orderId, paymentMethodId } = c.req.valid("json");
+
+    const db = getDb();
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return c.json(errorResponse("Order not found"), 404);
+    }
+
+    if (order.status !== "CREATED") {
+      return c.json(errorResponse("Order is not in CREATED status"), 400);
+    }
+
+    try {
+      // Create and confirm Stripe payment
+      const paymentIntent = await createPaymentIntent(order.amountCents, {
+        orderId: order.id,
+        deviceWalletAddress: order.deviceWalletAddress,
+      });
+
+      const confirmed = await confirmPayment(paymentIntent.id, paymentMethodId);
+
+      if (confirmed.status === "succeeded") {
+        // Update order status to PAID
+        const [updated] = await db
+          .update(orders)
+          .set({
+            status: "PAID",
+            stripePaymentIntentId: paymentIntent.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(orders.id, orderId))
+          .returning();
+
+        return c.json(successResponse(updated));
+      } else {
+        return c.json(
+          errorResponse(`Payment status: ${confirmed.status}`),
+          400
+        );
+      }
+    } catch (error: any) {
+      // Update order to FAILED
+      await db
+        .update(orders)
+        .set({ status: "FAILED", updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
+
+      return c.json(
+        errorResponse(error.message ?? "Payment processing failed"),
+        400
+      );
+    }
+  }
+);
+
+export default buyerOrders;
