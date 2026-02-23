@@ -2,11 +2,7 @@ import { Hono } from "hono";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { orders, devices, services } from "../../db/schema.ts";
-import { uuidSchema } from "../../schemas/index.ts";
-import {
-  successResponse,
-  errorResponse,
-} from "@sudobility/tapayoka_types";
+import { successResponse } from "@sudobility/tapayoka_types";
 
 const vendorOrders = new Hono();
 
@@ -15,11 +11,10 @@ const vendorOrders = new Hono();
  */
 vendorOrders.get("/", async c => {
   const limit = parseInt(c.req.query("limit") ?? "50");
-  const status = c.req.query("status");
 
   const db = getDb();
 
-  let query = db
+  const query = db
     .select({
       order: orders,
       deviceLabel: devices.label,

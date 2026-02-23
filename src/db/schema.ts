@@ -1,6 +1,5 @@
 import {
   pgSchema,
-  pgEnum,
   uuid,
   text,
   varchar,

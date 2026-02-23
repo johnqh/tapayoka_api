@@ -9,10 +9,10 @@ import {
   uuidSchema,
 } from "../../schemas/index.ts";
 import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
-import type { ServiceType } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse, type ServiceType } from "@sudobility/tapayoka_types";
+import type { AppEnv } from "../../lib/hono-types.ts";
 
-const buyerOrders = new Hono();
+const buyerOrders = new Hono<AppEnv>();
 
 /** Calculate authorized seconds based on service type and amount */
 function calculateAuthorizedSeconds(
@@ -31,14 +31,6 @@ function calculateAuthorizedSeconds(
       return Math.floor(amountCents / 25) * minutesPer25c * 60;
   }
 }
-
-/** Valid order status transitions */
-const validTransitions: Record<string, string[]> = {
-  CREATED: ["PAID", "FAILED"],
-  PAID: ["AUTHORIZED", "FAILED"],
-  AUTHORIZED: ["RUNNING", "FAILED"],
-  RUNNING: ["DONE", "FAILED"],
-};
 
 /**
  * POST / - Create a new order

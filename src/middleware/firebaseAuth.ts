@@ -3,13 +3,14 @@ import { getFirebaseAdmin } from "../services/firebase.ts";
 import { getDb } from "../db/index.ts";
 import { users } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
+import type { AppEnv } from "../lib/hono-types.ts";
 
 /**
  * Firebase authentication middleware.
  * Verifies Firebase ID token from Authorization header.
  * Sets context variables: firebaseUid, userId, userEmail, userRole.
  */
-export async function firebaseAuth(c: Context, next: Next) {
+export async function firebaseAuth(c: Context<AppEnv>, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json({ success: false, error: "Missing authorization token" }, 401);

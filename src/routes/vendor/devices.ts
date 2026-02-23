@@ -1,12 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   devices,
   deviceServices,
   services,
-  orders,
 } from "../../db/schema.ts";
 import {
   deviceCreateSchema,
@@ -19,7 +18,6 @@ import {
   successResponse,
   errorResponse,
 } from "@sudobility/tapayoka_types";
-import { sql } from "drizzle-orm";
 
 const vendorDevices = new Hono();
 

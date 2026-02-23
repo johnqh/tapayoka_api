@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { authorizations, orders } from "../../db/schema.ts";
+import { authorizations, orders, services } from "../../db/schema.ts";
 import { createAuthorizationSchema, uuidSchema } from "../../schemas/index.ts";
 import { signPayload } from "../../services/crypto.ts";
 import {
@@ -11,7 +11,6 @@ import {
   type AuthorizationPayload,
   type ServiceType,
 } from "@sudobility/tapayoka_types";
-import { services } from "../../db/schema.ts";
 import { randomUUID } from "crypto";
 
 const buyerAuthorizations = new Hono();
