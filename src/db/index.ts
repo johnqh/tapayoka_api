@@ -164,6 +164,65 @@ export async function initDatabase() {
     )
   `;
 
+  // --- Vendor Management Tables ---
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_locations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      firebase_user_id VARCHAR(128) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      address VARCHAR(255) NOT NULL,
+      city VARCHAR(255) NOT NULL,
+      state_province VARCHAR(255) NOT NULL,
+      zipcode VARCHAR(20) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_equipment_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      firebase_user_id VARCHAR(128) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_services (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vendor_location_id UUID NOT NULL REFERENCES tapayoka.vendor_locations(id),
+      vendor_equipment_category_id UUID NOT NULL REFERENCES tapayoka.vendor_equipment_categories(id),
+      name VARCHAR(255) NOT NULL,
+      price NUMERIC(10,2) NOT NULL,
+      currency_code VARCHAR(3) NOT NULL DEFAULT 'USD',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(vendor_location_id, vendor_equipment_category_id)
+    )
+  `;
+
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_service_controls (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vendor_service_id UUID NOT NULL REFERENCES tapayoka.vendor_services(id) ON DELETE CASCADE,
+      pin_number INTEGER NOT NULL,
+      duration INTEGER NOT NULL
+    )
+  `;
+
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_equipments (
+      wallet_address VARCHAR(42) PRIMARY KEY NOT NULL,
+      vendor_service_id UUID NOT NULL REFERENCES tapayoka.vendor_services(id),
+      name VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+
   // Create indexes
   await connection`CREATE INDEX IF NOT EXISTS devices_entity_idx ON tapayoka.devices(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS services_entity_idx ON tapayoka.services(entity_id)`;
@@ -172,6 +231,12 @@ export async function initDatabase() {
   await connection`CREATE INDEX IF NOT EXISTS authorizations_order_idx ON tapayoka.authorizations(order_id)`;
   await connection`CREATE INDEX IF NOT EXISTS device_logs_device_idx ON tapayoka.device_logs(device_wallet_address)`;
   await connection`CREATE INDEX IF NOT EXISTS admin_logs_user_idx ON tapayoka.admin_logs(user_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_locations_firebase_user_idx ON tapayoka.vendor_locations(firebase_user_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_equipment_categories_firebase_user_idx ON tapayoka.vendor_equipment_categories(firebase_user_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_services_location_idx ON tapayoka.vendor_services(vendor_location_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_services_category_idx ON tapayoka.vendor_services(vendor_equipment_category_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_service_controls_service_idx ON tapayoka.vendor_service_controls(vendor_service_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_equipments_service_idx ON tapayoka.vendor_equipments(vendor_service_id)`;
 
   console.log("Database initialized successfully");
 }

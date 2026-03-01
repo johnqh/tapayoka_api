@@ -1,0 +1,205 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { eq, and } from "drizzle-orm";
+import { getDb } from "../../db/index.ts";
+import {
+  vendorEquipments,
+  vendorServices,
+  vendorLocations,
+} from "../../db/schema.ts";
+import {
+  vendorEquipmentCreateSchema,
+  vendorEquipmentUpdateSchema,
+  ethAddressSchema,
+  uuidSchema,
+} from "../../schemas/index.ts";
+import {
+  successResponse,
+  errorResponse,
+} from "@sudobility/tapayoka_types";
+import type { AppEnv } from "../../lib/hono-types.ts";
+
+const equipments = new Hono<AppEnv>();
+
+/** Helper: verify service belongs to authenticated user */
+async function verifyServiceOwnership(
+  db: ReturnType<typeof getDb>,
+  serviceId: string,
+  firebaseUid: string
+) {
+  const [result] = await db
+    .select({ service: vendorServices })
+    .from(vendorServices)
+    .innerJoin(
+      vendorLocations,
+      eq(vendorServices.vendorLocationId, vendorLocations.id)
+    )
+    .where(
+      and(
+        eq(vendorServices.id, serviceId),
+        eq(vendorLocations.firebaseUserId, firebaseUid)
+      )
+    )
+    .limit(1);
+  return !!result;
+}
+
+/**
+ * GET /service/:serviceId - Get all equipments for a service
+ */
+equipments.get("/service/:serviceId", async c => {
+  const serviceId = c.req.param("serviceId");
+  const parsed = uuidSchema.safeParse(serviceId);
+  if (!parsed.success) {
+    return c.json(errorResponse("Invalid service ID"), 400);
+  }
+
+  const firebaseUid = c.get("firebaseUid");
+  const db = getDb();
+
+  const owned = await verifyServiceOwnership(db, serviceId, firebaseUid);
+  if (!owned) {
+    return c.json(errorResponse("Service not found"), 404);
+  }
+
+  const results = await db
+    .select()
+    .from(vendorEquipments)
+    .where(eq(vendorEquipments.vendorServiceId, serviceId));
+
+  return c.json(successResponse(results));
+});
+
+/**
+ * POST / - Create a new equipment
+ */
+equipments.post(
+  "/",
+  zValidator("json", vendorEquipmentCreateSchema),
+  async c => {
+    const data = c.req.valid("json");
+    const firebaseUid = c.get("firebaseUid");
+    const db = getDb();
+
+    const owned = await verifyServiceOwnership(
+      db,
+      data.vendorServiceId,
+      firebaseUid
+    );
+    if (!owned) {
+      return c.json(errorResponse("Service not found"), 404);
+    }
+
+    // Check for duplicate wallet address
+    const [existing] = await db
+      .select()
+      .from(vendorEquipments)
+      .where(eq(vendorEquipments.walletAddress, data.walletAddress))
+      .limit(1);
+
+    if (existing) {
+      return c.json(errorResponse("Equipment with this wallet address already exists"), 409);
+    }
+
+    const [equipment] = await db
+      .insert(vendorEquipments)
+      .values(data)
+      .returning();
+
+    return c.json(successResponse(equipment), 201);
+  }
+);
+
+/**
+ * PUT /:walletAddress - Update an equipment
+ */
+equipments.put(
+  "/:walletAddress",
+  zValidator("json", vendorEquipmentUpdateSchema),
+  async c => {
+    const walletAddress = c.req.param("walletAddress");
+    const parsedAddr = ethAddressSchema.safeParse(walletAddress);
+    if (!parsedAddr.success) {
+      return c.json(errorResponse("Invalid wallet address"), 400);
+    }
+
+    const data = c.req.valid("json");
+    const firebaseUid = c.get("firebaseUid");
+    const db = getDb();
+
+    // Get equipment and verify ownership through service -> location
+    const [equipment] = await db
+      .select()
+      .from(vendorEquipments)
+      .where(eq(vendorEquipments.walletAddress, walletAddress))
+      .limit(1);
+
+    if (!equipment) {
+      return c.json(errorResponse("Equipment not found"), 404);
+    }
+
+    const owned = await verifyServiceOwnership(
+      db,
+      equipment.vendorServiceId,
+      firebaseUid
+    );
+    if (!owned) {
+      return c.json(errorResponse("Equipment not found"), 404);
+    }
+
+    // If changing vendorServiceId, verify ownership of target service too
+    if (data.vendorServiceId) {
+      const targetOwned = await verifyServiceOwnership(
+        db,
+        data.vendorServiceId,
+        firebaseUid
+      );
+      if (!targetOwned) {
+        return c.json(errorResponse("Target service not found"), 404);
+      }
+    }
+
+    const [updated] = await db
+      .update(vendorEquipments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(vendorEquipments.walletAddress, walletAddress))
+      .returning();
+
+    return c.json(successResponse(updated));
+  }
+);
+
+/**
+ * DELETE /:walletAddress - Delete an equipment
+ */
+equipments.delete("/:walletAddress", async c => {
+  const walletAddress = c.req.param("walletAddress");
+  const firebaseUid = c.get("firebaseUid");
+  const db = getDb();
+
+  const [equipment] = await db
+    .select()
+    .from(vendorEquipments)
+    .where(eq(vendorEquipments.walletAddress, walletAddress))
+    .limit(1);
+
+  if (!equipment) {
+    return c.json(errorResponse("Equipment not found"), 404);
+  }
+
+  const owned = await verifyServiceOwnership(
+    db,
+    equipment.vendorServiceId,
+    firebaseUid
+  );
+  if (!owned) {
+    return c.json(errorResponse("Equipment not found"), 404);
+  }
+
+  await db
+    .delete(vendorEquipments)
+    .where(eq(vendorEquipments.walletAddress, walletAddress));
+  return c.json(successResponse({ deleted: true }));
+});
+
+export default equipments;

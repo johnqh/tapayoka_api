@@ -18,6 +18,11 @@ import vendorServices from "./vendor/services.ts";
 import vendorOrders from "./vendor/orders.ts";
 import vendorEntities from "./vendor/entities.ts";
 import vendorQr from "./vendor/qr.ts";
+import vendorLocations from "./vendor/locations.ts";
+import vendorEquipmentCategories from "./vendor/equipmentCategories.ts";
+import vendorServicesNew from "./vendor/vendorServices.ts";
+import vendorServiceControls from "./vendor/serviceControls.ts";
+import vendorEquipments from "./vendor/equipments.ts";
 
 const routes = new Hono();
 
@@ -42,6 +47,11 @@ vendorRoutes.route("/services", vendorServices);
 vendorRoutes.route("/orders", vendorOrders);
 vendorRoutes.route("/entities", vendorEntities);
 vendorRoutes.route("/qr", vendorQr);
+vendorRoutes.route("/locations", vendorLocations);
+vendorRoutes.route("/equipment-categories", vendorEquipmentCategories);
+vendorRoutes.route("/vendor-services", vendorServicesNew);
+vendorRoutes.route("/service-controls", vendorServiceControls);
+vendorRoutes.route("/equipments", vendorEquipments);
 routes.route("/vendor", vendorRoutes);
 
 export default routes;

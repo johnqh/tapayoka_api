@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   jsonb,
+  numeric,
   index,
   unique,
 } from "drizzle-orm/pg-core";
@@ -185,4 +186,102 @@ export const adminLogs = tapayoka.table(
     createdAt: timestamp("created_at").defaultNow(),
   },
   table => [index("admin_logs_user_idx").on(table.userId)]
+);
+
+// =============================================================================
+// Vendor Management Tables
+// =============================================================================
+
+export const vendorLocations = tapayoka.table(
+  "vendor_locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    firebaseUserId: varchar("firebase_user_id", { length: 128 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    address: varchar("address", { length: 255 }).notNull(),
+    city: varchar("city", { length: 255 }).notNull(),
+    stateProvince: varchar("state_province", { length: 255 }).notNull(),
+    zipcode: varchar("zipcode", { length: 20 }).notNull(),
+    country: varchar("country", { length: 100 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  table => [index("vendor_locations_firebase_user_idx").on(table.firebaseUserId)]
+);
+
+export const vendorEquipmentCategories = tapayoka.table(
+  "vendor_equipment_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    firebaseUserId: varchar("firebase_user_id", { length: 128 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  table => [
+    index("vendor_equipment_categories_firebase_user_idx").on(
+      table.firebaseUserId
+    ),
+  ]
+);
+
+export const vendorServices = tapayoka.table(
+  "vendor_services",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vendorLocationId: uuid("vendor_location_id")
+      .notNull()
+      .references(() => vendorLocations.id),
+    vendorEquipmentCategoryId: uuid("vendor_equipment_category_id")
+      .notNull()
+      .references(() => vendorEquipmentCategories.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+    currencyCode: varchar("currency_code", { length: 3 })
+      .notNull()
+      .default("USD"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  table => [
+    unique("vendor_services_location_category_unique").on(
+      table.vendorLocationId,
+      table.vendorEquipmentCategoryId
+    ),
+    index("vendor_services_location_idx").on(table.vendorLocationId),
+    index("vendor_services_category_idx").on(table.vendorEquipmentCategoryId),
+  ]
+);
+
+export const vendorServiceControls = tapayoka.table(
+  "vendor_service_controls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vendorServiceId: uuid("vendor_service_id")
+      .notNull()
+      .references(() => vendorServices.id, { onDelete: "cascade" }),
+    pinNumber: integer("pin_number").notNull(),
+    duration: integer("duration").notNull(),
+  },
+  table => [
+    index("vendor_service_controls_service_idx").on(table.vendorServiceId),
+  ]
+);
+
+export const vendorEquipments = tapayoka.table(
+  "vendor_equipments",
+  {
+    walletAddress: varchar("wallet_address", { length: 42 })
+      .primaryKey()
+      .notNull(),
+    vendorServiceId: uuid("vendor_service_id")
+      .notNull()
+      .references(() => vendorServices.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  table => [
+    index("vendor_equipments_service_idx").on(table.vendorServiceId),
+  ]
 );
