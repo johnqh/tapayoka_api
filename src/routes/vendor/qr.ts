@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { devices } from "../../db/schema.ts";
 import { ethAddressSchema } from "../../schemas/index.ts";
@@ -7,14 +7,15 @@ import {
   successResponse,
   errorResponse,
 } from "@sudobility/tapayoka_types";
+import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
-const vendorQr = new Hono();
+const vendorQr = new Hono<AppEnv>();
 
-/**
- * GET /:walletAddress - Generate QR code data for a device.
- * The QR code contains the device's wallet address,
- * which the buyer app uses to discover the device via BLE.
- */
+/** GET /:walletAddress - Generate QR code data for a device */
 vendorQr.get("/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
   const parsed = ethAddressSchema.safeParse(walletAddress);
@@ -22,19 +23,33 @@ vendorQr.get("/:walletAddress", async c => {
     return c.json(errorResponse("Invalid wallet address"), 400);
   }
 
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
   const [device] = await db
     .select()
     .from(devices)
-    .where(eq(devices.walletAddress, walletAddress))
+    .where(
+      and(
+        eq(devices.walletAddress, walletAddress),
+        eq(devices.entityId, result.entity.id)
+      )
+    )
     .limit(1);
 
   if (!device) {
     return c.json(errorResponse("Device not found"), 404);
   }
 
-  // QR data is just the wallet address — buyer app uses this
-  // to find the device via BLE name prefix matching
   return c.json(
     successResponse({
       deviceWalletAddress: walletAddress,

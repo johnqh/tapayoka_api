@@ -2,15 +2,28 @@ import { Hono } from "hono";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { orders, devices, services } from "../../db/schema.ts";
-import { successResponse } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
-const vendorOrders = new Hono();
+const vendorOrders = new Hono<AppEnv>();
 
-/**
- * GET / - List recent orders for vendor's entity
- */
+/** GET / - List recent orders for entity */
 vendorOrders.get("/", async c => {
   const limit = parseInt(c.req.query("limit") ?? "50");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
 
   const db = getDb();
 
@@ -24,10 +37,9 @@ vendorOrders.get("/", async c => {
     .from(orders)
     .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .innerJoin(services, eq(orders.serviceId, services.id))
+    .where(eq(devices.entityId, result.entity.id))
     .orderBy(desc(orders.createdAt))
     .limit(limit);
-
-  // TODO: add status filter when needed
 
   const results = await query;
 
@@ -41,39 +53,56 @@ vendorOrders.get("/", async c => {
   return c.json(successResponse(detailed));
 });
 
-/**
- * GET /stats - Dashboard statistics
- */
+/** GET /stats - Dashboard statistics for entity */
 vendorOrders.get("/stats", async c => {
-  const db = getDb();
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-  // Get counts
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
+  const db = getDb();
+  const entityId = result.entity.id;
+
+  // Get counts scoped to entity
   const [deviceCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(devices);
+    .from(devices)
+    .where(eq(devices.entityId, entityId));
 
   const [activeDeviceCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(devices)
-    .where(eq(devices.status, "ACTIVE"));
+    .where(and(eq(devices.entityId, entityId), eq(devices.status, "ACTIVE")));
 
+  // Orders through entity's devices
   const [orderCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(orders);
+    .from(orders)
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
+    .where(eq(devices.entityId, entityId));
 
   const [activeOrderCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.status, "RUNNING"));
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
+    .where(and(eq(devices.entityId, entityId), eq(orders.status, "RUNNING")));
 
   // Revenue today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const [revenueToday] = await db
-    .select({ total: sql<number>`COALESCE(SUM(amount_cents), 0)` })
+    .select({ total: sql<number>`COALESCE(SUM(${orders.amountCents}), 0)` })
     .from(orders)
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .where(
       and(
+        eq(devices.entityId, entityId),
         eq(orders.status, "DONE"),
         gte(orders.createdAt, today)
       )
@@ -82,10 +111,12 @@ vendorOrders.get("/stats", async c => {
   // Revenue this week
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [revenueWeek] = await db
-    .select({ total: sql<number>`COALESCE(SUM(amount_cents), 0)` })
+    .select({ total: sql<number>`COALESCE(SUM(${orders.amountCents}), 0)` })
     .from(orders)
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .where(
       and(
+        eq(devices.entityId, entityId),
         eq(orders.status, "DONE"),
         gte(orders.createdAt, weekAgo)
       )
@@ -95,12 +126,14 @@ vendorOrders.get("/stats", async c => {
   const [doneCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.status, "DONE"));
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
+    .where(and(eq(devices.entityId, entityId), eq(orders.status, "DONE")));
 
   const [failedCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .where(eq(orders.status, "FAILED"));
+    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
+    .where(and(eq(devices.entityId, entityId), eq(orders.status, "FAILED")));
 
   const total =
     Number(doneCount?.count ?? 0) + Number(failedCount?.count ?? 0);

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { services } from "../../db/schema.ts";
 import {
@@ -12,22 +12,36 @@ import {
   successResponse,
   errorResponse,
 } from "@sudobility/tapayoka_types";
+import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
-const vendorServices = new Hono();
+const vendorServices = new Hono<AppEnv>();
 
-/**
- * GET / - List all services for the vendor's entity
- */
+/** GET / - List all services for the entity */
 vendorServices.get("/", async c => {
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
-  // TODO: filter by entity from auth context
-  const allServices = await db.select().from(services);
+  const allServices = await db
+    .select()
+    .from(services)
+    .where(eq(services.entityId, result.entity.id));
   return c.json(successResponse(allServices));
 });
 
-/**
- * GET /:id - Get service by ID
- */
+/** GET /:id - Get service by ID */
 vendorServices.get("/:id", async c => {
   const serviceId = c.req.param("id");
   const parsed = uuidSchema.safeParse(serviceId);
@@ -35,11 +49,24 @@ vendorServices.get("/:id", async c => {
     return c.json(errorResponse("Invalid service ID"), 400);
   }
 
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
   const [service] = await db
     .select()
     .from(services)
-    .where(eq(services.id, serviceId))
+    .where(
+      and(eq(services.id, serviceId), eq(services.entityId, result.entity.id))
+    )
     .limit(1);
 
   if (!service) {
@@ -49,13 +76,19 @@ vendorServices.get("/:id", async c => {
   return c.json(successResponse(service));
 });
 
-/**
- * POST / - Create a new service
- */
+/** POST / - Create a new service */
 vendorServices.post("/", zValidator("json", serviceCreateSchema), async c => {
   const data = c.req.valid("json");
-  // TODO: get entityId from auth context
-  const entityId = "default";
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
 
   // Validate type-specific fields
   if (data.type === "TRIGGER" && (data.fixedMinutes || data.minutesPer25c)) {
@@ -80,27 +113,40 @@ vendorServices.post("/", zValidator("json", serviceCreateSchema), async c => {
   const db = getDb();
   const [service] = await db
     .insert(services)
-    .values({ ...data, entityId })
+    .values({ ...data, entityId: result.entity.id })
     .returning();
 
   return c.json(successResponse(service), 201);
 });
 
-/**
- * PUT /:id - Update a service
- */
+/** PUT /:id - Update a service */
 vendorServices.put(
   "/:id",
   zValidator("json", serviceUpdateSchema),
   async c => {
     const serviceId = c.req.param("id");
     const data = c.req.valid("json");
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
+
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
 
     const db = getDb();
     const [updated] = await db
       .update(services)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(services.id, serviceId))
+      .where(
+        and(
+          eq(services.id, serviceId),
+          eq(services.entityId, result.entity.id)
+        )
+      )
       .returning();
 
     if (!updated) {
@@ -111,16 +157,29 @@ vendorServices.put(
   }
 );
 
-/**
- * DELETE /:id - Delete a service
- */
+/** DELETE /:id - Delete a service */
 vendorServices.delete("/:id", async c => {
   const serviceId = c.req.param("id");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
 
   const db = getDb();
   const [deleted] = await db
     .delete(services)
-    .where(eq(services.id, serviceId))
+    .where(
+      and(
+        eq(services.id, serviceId),
+        eq(services.entityId, result.entity.id)
+      )
+    )
     .returning();
 
   if (!deleted) {

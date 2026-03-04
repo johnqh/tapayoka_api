@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema.ts";
 import { getRequiredEnv } from "../lib/env-helper.ts";
+import { runEntityMigration } from "@sudobility/entity_service";
 
 // Lazy-initialized database connection
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
@@ -63,7 +64,7 @@ export async function initDatabase() {
     );
   }
 
-  // Create tables
+  // Create users table
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,15 +72,31 @@ export async function initDatabase() {
       email VARCHAR(255),
       display_name VARCHAR(255),
       role tapayoka.user_role NOT NULL DEFAULT 'buyer',
+      tos_accepted_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `;
 
+  // Add tos_accepted_at column if it doesn't exist (migration for existing DBs)
+  await connection`
+    ALTER TABLE tapayoka.users ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMP
+  `;
+
+  // Run entity_service migrations (creates entities, entity_members, entity_invitations tables)
+  await runEntityMigration({
+    client: connection,
+    schemaName: "tapayoka",
+    indexPrefix: "tapayoka",
+    migrateProjects: false,
+    migrateUsers: false,
+  });
+
+  // Create legacy tables (devices, services use entity_id FK)
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.devices (
       wallet_address VARCHAR(42) PRIMARY KEY NOT NULL,
-      entity_id VARCHAR(255) NOT NULL,
+      entity_id UUID NOT NULL REFERENCES tapayoka.entities(id) ON DELETE CASCADE,
       label VARCHAR(255) NOT NULL,
       model VARCHAR(255),
       location VARCHAR(255),
@@ -94,7 +111,7 @@ export async function initDatabase() {
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.services (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      entity_id VARCHAR(255) NOT NULL,
+      entity_id UUID NOT NULL REFERENCES tapayoka.entities(id) ON DELETE CASCADE,
       name VARCHAR(255) NOT NULL,
       description TEXT,
       type tapayoka.service_type NOT NULL,
@@ -164,11 +181,11 @@ export async function initDatabase() {
     )
   `;
 
-  // --- Vendor Management Tables ---
+  // --- Vendor Management Tables (entity-scoped) ---
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.vendor_locations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      firebase_user_id VARCHAR(128) NOT NULL,
+      entity_id UUID NOT NULL REFERENCES tapayoka.entities(id) ON DELETE CASCADE,
       name VARCHAR(255) NOT NULL,
       address VARCHAR(255) NOT NULL,
       city VARCHAR(255) NOT NULL,
@@ -183,7 +200,7 @@ export async function initDatabase() {
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.vendor_equipment_categories (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      firebase_user_id VARCHAR(128) NOT NULL,
+      entity_id UUID NOT NULL REFERENCES tapayoka.entities(id) ON DELETE CASCADE,
       name VARCHAR(255) NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
@@ -231,8 +248,8 @@ export async function initDatabase() {
   await connection`CREATE INDEX IF NOT EXISTS authorizations_order_idx ON tapayoka.authorizations(order_id)`;
   await connection`CREATE INDEX IF NOT EXISTS device_logs_device_idx ON tapayoka.device_logs(device_wallet_address)`;
   await connection`CREATE INDEX IF NOT EXISTS admin_logs_user_idx ON tapayoka.admin_logs(user_id)`;
-  await connection`CREATE INDEX IF NOT EXISTS vendor_locations_firebase_user_idx ON tapayoka.vendor_locations(firebase_user_id)`;
-  await connection`CREATE INDEX IF NOT EXISTS vendor_equipment_categories_firebase_user_idx ON tapayoka.vendor_equipment_categories(firebase_user_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_locations_entity_idx ON tapayoka.vendor_locations(entity_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_equipment_categories_entity_idx ON tapayoka.vendor_equipment_categories(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_services_location_idx ON tapayoka.vendor_services(vendor_location_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_services_category_idx ON tapayoka.vendor_services(vendor_equipment_category_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_service_controls_service_idx ON tapayoka.vendor_service_controls(vendor_service_id)`;

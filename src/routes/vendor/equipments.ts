@@ -18,14 +18,18 @@ import {
   errorResponse,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
 const equipments = new Hono<AppEnv>();
 
-/** Helper: verify service belongs to authenticated user */
+/** Helper: verify service belongs to entity via location */
 async function verifyServiceOwnership(
   db: ReturnType<typeof getDb>,
   serviceId: string,
-  firebaseUid: string
+  entityId: string
 ) {
   const [result] = await db
     .select({ service: vendorServices })
@@ -37,16 +41,14 @@ async function verifyServiceOwnership(
     .where(
       and(
         eq(vendorServices.id, serviceId),
-        eq(vendorLocations.firebaseUserId, firebaseUid)
+        eq(vendorLocations.entityId, entityId)
       )
     )
     .limit(1);
   return !!result;
 }
 
-/**
- * GET /service/:serviceId - Get all equipments for a service
- */
+/** GET /service/:serviceId - Get all equipments for a service */
 equipments.get("/service/:serviceId", async c => {
   const serviceId = c.req.param("serviceId");
   const parsed = uuidSchema.safeParse(serviceId);
@@ -54,10 +56,19 @@ equipments.get("/service/:serviceId", async c => {
     return c.json(errorResponse("Invalid service ID"), 400);
   }
 
-  const firebaseUid = c.get("firebaseUid");
-  const db = getDb();
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-  const owned = await verifyServiceOwnership(db, serviceId, firebaseUid);
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
+  const db = getDb();
+  const owned = await verifyServiceOwnership(db, serviceId, result.entity.id);
   if (!owned) {
     return c.json(errorResponse("Service not found"), 404);
   }
@@ -70,21 +81,28 @@ equipments.get("/service/:serviceId", async c => {
   return c.json(successResponse(results));
 });
 
-/**
- * POST / - Create a new equipment
- */
+/** POST / - Create a new equipment */
 equipments.post(
   "/",
   zValidator("json", vendorEquipmentCreateSchema),
   async c => {
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
-    const db = getDb();
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
 
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
+    const db = getDb();
     const owned = await verifyServiceOwnership(
       db,
       data.vendorServiceId,
-      firebaseUid
+      result.entity.id
     );
     if (!owned) {
       return c.json(errorResponse("Service not found"), 404);
@@ -98,7 +116,10 @@ equipments.post(
       .limit(1);
 
     if (existing) {
-      return c.json(errorResponse("Equipment with this wallet address already exists"), 409);
+      return c.json(
+        errorResponse("Equipment with this wallet address already exists"),
+        409
+      );
     }
 
     const [equipment] = await db
@@ -110,9 +131,7 @@ equipments.post(
   }
 );
 
-/**
- * PUT /:walletAddress - Update an equipment
- */
+/** PUT /:walletAddress - Update an equipment */
 equipments.put(
   "/:walletAddress",
   zValidator("json", vendorEquipmentUpdateSchema),
@@ -124,7 +143,17 @@ equipments.put(
     }
 
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
+
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
     const db = getDb();
 
     // Get equipment and verify ownership through service -> location
@@ -141,7 +170,7 @@ equipments.put(
     const owned = await verifyServiceOwnership(
       db,
       equipment.vendorServiceId,
-      firebaseUid
+      result.entity.id
     );
     if (!owned) {
       return c.json(errorResponse("Equipment not found"), 404);
@@ -152,7 +181,7 @@ equipments.put(
       const targetOwned = await verifyServiceOwnership(
         db,
         data.vendorServiceId,
-        firebaseUid
+        result.entity.id
       );
       if (!targetOwned) {
         return c.json(errorResponse("Target service not found"), 404);
@@ -169,14 +198,21 @@ equipments.put(
   }
 );
 
-/**
- * DELETE /:walletAddress - Delete an equipment
- */
+/** DELETE /:walletAddress - Delete an equipment */
 equipments.delete("/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
-  const firebaseUid = c.get("firebaseUid");
-  const db = getDb();
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
+  const db = getDb();
   const [equipment] = await db
     .select()
     .from(vendorEquipments)
@@ -190,7 +226,7 @@ equipments.delete("/:walletAddress", async c => {
   const owned = await verifyServiceOwnership(
     db,
     equipment.vendorServiceId,
-    firebaseUid
+    result.entity.id
   );
   if (!owned) {
     return c.json(errorResponse("Equipment not found"), 404);

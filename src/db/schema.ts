@@ -11,6 +11,11 @@ import {
   index,
   unique,
 } from "drizzle-orm/pg-core";
+import {
+  createEntitiesTable,
+  createEntityMembersTable,
+  createEntityInvitationsTable,
+} from "@sudobility/entity_service";
 
 // PostgreSQL schema namespace
 export const tapayoka = pgSchema("tapayoka");
@@ -49,6 +54,14 @@ export const logDirectionEnum = tapayoka.enum("log_direction", [
 ]);
 
 // =============================================================================
+// Entity Tables (from entity_service)
+// =============================================================================
+
+export const entities = createEntitiesTable(tapayoka, "tapayoka");
+export const entityMembers = createEntityMembersTable(tapayoka, "tapayoka");
+export const entityInvitations = createEntityInvitationsTable(tapayoka, "tapayoka");
+
+// =============================================================================
 // Tables
 // =============================================================================
 
@@ -58,6 +71,7 @@ export const users = tapayoka.table("users", {
   email: varchar("email", { length: 255 }),
   displayName: varchar("display_name", { length: 255 }),
   role: userRoleEnum("role").notNull().default("buyer"),
+  tosAcceptedAt: timestamp("tos_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -68,7 +82,9 @@ export const devices = tapayoka.table(
     walletAddress: varchar("wallet_address", { length: 42 })
       .primaryKey()
       .notNull(),
-    entityId: varchar("entity_id", { length: 255 }).notNull(),
+    entityId: uuid("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
     label: varchar("label", { length: 255 }).notNull(),
     model: varchar("model", { length: 255 }),
     location: varchar("location", { length: 255 }),
@@ -85,7 +101,9 @@ export const services = tapayoka.table(
   "services",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    entityId: varchar("entity_id", { length: 255 }).notNull(),
+    entityId: uuid("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     type: serviceTypeEnum("type").notNull(),
@@ -196,7 +214,9 @@ export const vendorLocations = tapayoka.table(
   "vendor_locations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    firebaseUserId: varchar("firebase_user_id", { length: 128 }).notNull(),
+    entityId: uuid("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     address: varchar("address", { length: 255 }).notNull(),
     city: varchar("city", { length: 255 }).notNull(),
@@ -206,22 +226,22 @@ export const vendorLocations = tapayoka.table(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  table => [index("vendor_locations_firebase_user_idx").on(table.firebaseUserId)]
+  table => [index("vendor_locations_entity_idx").on(table.entityId)]
 );
 
 export const vendorEquipmentCategories = tapayoka.table(
   "vendor_equipment_categories",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    firebaseUserId: varchar("firebase_user_id", { length: 128 }).notNull(),
+    entityId: uuid("entity_id")
+      .notNull()
+      .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_equipment_categories_firebase_user_idx").on(
-      table.firebaseUserId
-    ),
+    index("vendor_equipment_categories_entity_idx").on(table.entityId),
   ]
 );
 

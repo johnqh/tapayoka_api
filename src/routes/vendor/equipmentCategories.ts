@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorEquipmentCategories,
@@ -17,25 +17,35 @@ import {
   errorResponse,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
 const equipmentCategories = new Hono<AppEnv>();
 
-/**
- * GET / - List all equipment categories for the authenticated vendor
- */
+/** GET / - List all equipment categories for the entity */
 equipmentCategories.get("/", async c => {
-  const firebaseUid = c.get("firebaseUid");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
   const results = await db
     .select()
     .from(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.firebaseUserId, firebaseUid));
+    .where(eq(vendorEquipmentCategories.entityId, result.entity.id));
   return c.json(successResponse(results));
 });
 
-/**
- * GET /:id - Get a single equipment category
- */
+/** GET /:id - Get a single equipment category */
 equipmentCategories.get("/:id", async c => {
   const id = c.req.param("id");
   const parsed = uuidSchema.safeParse(id);
@@ -43,98 +53,119 @@ equipmentCategories.get("/:id", async c => {
     return c.json(errorResponse("Invalid category ID"), 400);
   }
 
-  const firebaseUid = c.get("firebaseUid");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
   const [category] = await db
     .select()
     .from(vendorEquipmentCategories)
-    .where(
-      and(
-        eq(vendorEquipmentCategories.id, id),
-        eq(vendorEquipmentCategories.firebaseUserId, firebaseUid)
-      )
-    )
+    .where(eq(vendorEquipmentCategories.id, id))
     .limit(1);
 
-  if (!category) {
+  if (!category || category.entityId !== result.entity.id) {
     return c.json(errorResponse("Category not found"), 404);
   }
 
   return c.json(successResponse(category));
 });
 
-/**
- * POST / - Create a new equipment category
- */
+/** POST / - Create a new equipment category */
 equipmentCategories.post(
   "/",
   zValidator("json", vendorEquipmentCategoryCreateSchema),
   async c => {
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
-    const db = getDb();
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
 
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
+    const db = getDb();
     const [category] = await db
       .insert(vendorEquipmentCategories)
-      .values({ ...data, firebaseUserId: firebaseUid })
+      .values({ ...data, entityId: result.entity.id })
       .returning();
 
     return c.json(successResponse(category), 201);
   }
 );
 
-/**
- * PUT /:id - Update an equipment category
- */
+/** PUT /:id - Update an equipment category */
 equipmentCategories.put(
   "/:id",
   zValidator("json", vendorEquipmentCategoryUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
+
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
     const db = getDb();
+    const [category] = await db
+      .select()
+      .from(vendorEquipmentCategories)
+      .where(eq(vendorEquipmentCategories.id, id))
+      .limit(1);
+
+    if (!category || category.entityId !== result.entity.id) {
+      return c.json(errorResponse("Category not found"), 404);
+    }
 
     const [updated] = await db
       .update(vendorEquipmentCategories)
       .set({ ...data, updatedAt: new Date() })
-      .where(
-        and(
-          eq(vendorEquipmentCategories.id, id),
-          eq(vendorEquipmentCategories.firebaseUserId, firebaseUid)
-        )
-      )
+      .where(eq(vendorEquipmentCategories.id, id))
       .returning();
-
-    if (!updated) {
-      return c.json(errorResponse("Category not found"), 404);
-    }
 
     return c.json(successResponse(updated));
   }
 );
 
-/**
- * DELETE /:id - Delete a category (409 if has services)
- */
+/** DELETE /:id - Delete a category (409 if has services) */
 equipmentCategories.delete("/:id", async c => {
   const id = c.req.param("id");
-  const firebaseUid = c.get("firebaseUid");
-  const db = getDb();
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-  // Check ownership
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
+  const db = getDb();
   const [category] = await db
     .select()
     .from(vendorEquipmentCategories)
-    .where(
-      and(
-        eq(vendorEquipmentCategories.id, id),
-        eq(vendorEquipmentCategories.firebaseUserId, firebaseUid)
-      )
-    )
+    .where(eq(vendorEquipmentCategories.id, id))
     .limit(1);
 
-  if (!category) {
+  if (!category || category.entityId !== result.entity.id) {
     return c.json(errorResponse("Category not found"), 404);
   }
 
@@ -160,27 +191,28 @@ equipmentCategories.delete("/:id", async c => {
   return c.json(successResponse({ deleted: true }));
 });
 
-/**
- * GET /:id/services - Get services for a category
- */
+/** GET /:id/services - Get services for a category */
 equipmentCategories.get("/:id/services", async c => {
   const id = c.req.param("id");
-  const firebaseUid = c.get("firebaseUid");
-  const db = getDb();
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-  // Verify ownership
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
+  const db = getDb();
   const [category] = await db
     .select()
     .from(vendorEquipmentCategories)
-    .where(
-      and(
-        eq(vendorEquipmentCategories.id, id),
-        eq(vendorEquipmentCategories.firebaseUserId, firebaseUid)
-      )
-    )
+    .where(eq(vendorEquipmentCategories.id, id))
     .limit(1);
 
-  if (!category) {
+  if (!category || category.entityId !== result.entity.id) {
     return c.json(errorResponse("Category not found"), 404);
   }
 

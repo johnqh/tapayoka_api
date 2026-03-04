@@ -18,12 +18,14 @@ import {
   errorResponse,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
+import {
+  getEntityWithPermission,
+  getPermissionErrorStatus,
+} from "../../lib/entity-helpers.ts";
 
 const vendorServicesRoute = new Hono<AppEnv>();
 
-/**
- * GET /:id - Get a single vendor service
- */
+/** GET /:id - Get a single vendor service */
 vendorServicesRoute.get("/:id", async c => {
   const id = c.req.param("id");
   const parsed = uuidSchema.safeParse(id);
@@ -31,11 +33,21 @@ vendorServicesRoute.get("/:id", async c => {
     return c.json(errorResponse("Invalid service ID"), 400);
   }
 
-  const firebaseUid = c.get("firebaseUid");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
 
-  // Join to location to verify ownership
-  const [result] = await db
+  // Verify service belongs to entity via location
+  const [svcResult] = await db
     .select({ service: vendorServices })
     .from(vendorServices)
     .innerJoin(
@@ -45,37 +57,45 @@ vendorServicesRoute.get("/:id", async c => {
     .where(
       and(
         eq(vendorServices.id, id),
-        eq(vendorLocations.firebaseUserId, firebaseUid)
+        eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);
 
-  if (!result) {
+  if (!svcResult) {
     return c.json(errorResponse("Service not found"), 404);
   }
 
-  return c.json(successResponse(result.service));
+  return c.json(successResponse(svcResult.service));
 });
 
-/**
- * POST / - Create a new vendor service
- */
+/** POST / - Create a new vendor service */
 vendorServicesRoute.post(
   "/",
   zValidator("json", vendorServiceCreateSchema),
   async c => {
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
+
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
     const db = getDb();
 
-    // Verify location ownership
+    // Verify location belongs to entity
     const [location] = await db
       .select()
       .from(vendorLocations)
       .where(
         and(
           eq(vendorLocations.id, data.vendorLocationId),
-          eq(vendorLocations.firebaseUserId, firebaseUid)
+          eq(vendorLocations.entityId, result.entity.id)
         )
       )
       .limit(1);
@@ -84,14 +104,14 @@ vendorServicesRoute.post(
       return c.json(errorResponse("Location not found"), 404);
     }
 
-    // Verify category ownership
+    // Verify category belongs to entity
     const [category] = await db
       .select()
       .from(vendorEquipmentCategories)
       .where(
         and(
           eq(vendorEquipmentCategories.id, data.vendorEquipmentCategoryId),
-          eq(vendorEquipmentCategories.firebaseUserId, firebaseUid)
+          eq(vendorEquipmentCategories.entityId, result.entity.id)
         )
       )
       .limit(1);
@@ -133,16 +153,24 @@ vendorServicesRoute.post(
   }
 );
 
-/**
- * PUT /:id - Update a vendor service
- */
+/** PUT /:id - Update a vendor service */
 vendorServicesRoute.put(
   "/:id",
   zValidator("json", vendorServiceUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
-    const firebaseUid = c.get("firebaseUid");
+    const entitySlug = c.req.param("entitySlug");
+    const userId = c.get("firebaseUid");
+
+    const result = await getEntityWithPermission(entitySlug, userId, true);
+    if (result.error !== undefined) {
+      return c.json(
+        { ...errorResponse(result.error), errorCode: result.errorCode },
+        getPermissionErrorStatus(result.errorCode)
+      );
+    }
+
     const db = getDb();
 
     // Verify ownership via location join
@@ -156,7 +184,7 @@ vendorServicesRoute.put(
       .where(
         and(
           eq(vendorServices.id, id),
-          eq(vendorLocations.firebaseUserId, firebaseUid)
+          eq(vendorLocations.entityId, result.entity.id)
         )
       )
       .limit(1);
@@ -175,12 +203,20 @@ vendorServicesRoute.put(
   }
 );
 
-/**
- * DELETE /:id - Delete a vendor service (409 if has equipments; controls cascade)
- */
+/** DELETE /:id - Delete a vendor service (409 if has equipments; controls cascade) */
 vendorServicesRoute.delete("/:id", async c => {
   const id = c.req.param("id");
-  const firebaseUid = c.get("firebaseUid");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
+
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
+  }
+
   const db = getDb();
 
   // Verify ownership via location join
@@ -194,7 +230,7 @@ vendorServicesRoute.delete("/:id", async c => {
     .where(
       and(
         eq(vendorServices.id, id),
-        eq(vendorLocations.firebaseUserId, firebaseUid)
+        eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);

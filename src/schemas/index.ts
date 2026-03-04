@@ -159,3 +159,13 @@ export const vendorEquipmentUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   vendorServiceId: uuidSchema.optional(),
 });
+
+// Entity schemas
+export const entitySlugParamSchema = z.object({
+  entitySlug: z.string().min(1),
+});
+
+export const entityCreateSchema = z.object({
+  displayName: z.string().optional(),
+  acceptTos: z.literal(true),
+});
