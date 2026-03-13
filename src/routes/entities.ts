@@ -50,10 +50,10 @@ entitiesRouter.post("/", async c => {
   try {
     const db = getDb();
 
-    // Set tosAcceptedAt on user
+    // Set tosAcceptedAt and grant vendor role
     await db
       .update(users)
-      .set({ tosAcceptedAt: new Date(), updatedAt: new Date() })
+      .set({ tosAcceptedAt: new Date(), role: "vendor", updatedAt: new Date() })
       .where(eq(users.firebaseUid, userId));
 
     // Auto-generate displayName from user if not provided
@@ -68,9 +68,19 @@ entitiesRouter.post("/", async c => {
         user?.displayName || user?.email?.split("@")[0] || "My Organization";
     }
 
-    const entity = await helpers.entity.createOrganizationEntity(userId, {
-      displayName: entityDisplayName,
-    });
+    let entity;
+    try {
+      entity = await helpers.entity.createOrganizationEntity(userId, {
+        displayName: entityDisplayName,
+      });
+    } catch {
+      // Entity may already exist (e.g. user accepted buyer TOS first)
+      const existing = await helpers.entity.getUserEntities(userId);
+      if (existing.length > 0) {
+        return c.json(successResponse(existing[0]), 200);
+      }
+      throw new Error("Failed to create entity");
+    }
     return c.json(successResponse(entity), 201);
   } catch (error: any) {
     console.error("Error creating entity:", error);
