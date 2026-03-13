@@ -19,7 +19,7 @@ export const deviceVerifySchema = z.object({
 
 export const createOrderSchema = z.object({
   deviceWalletAddress: ethAddressSchema,
-  serviceId: uuidSchema,
+  installationId: uuidSchema,
   amountCents: z.number().int().positive(),
 });
 
@@ -69,7 +69,7 @@ export const deviceUpdateSchema = z.object({
     .optional(),
 });
 
-export const serviceCreateSchema = z.object({
+export const installationCreateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
   type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]),
@@ -78,7 +78,7 @@ export const serviceCreateSchema = z.object({
   minutesPer25c: z.number().int().positive().optional(),
 });
 
-export const serviceUpdateSchema = z.object({
+export const installationUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().nullable().optional(),
   type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]).optional(),
@@ -88,8 +88,8 @@ export const serviceUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export const deviceServiceAssignSchema = z.object({
-  serviceIds: z.array(uuidSchema).min(1),
+export const deviceInstallationAssignSchema = z.object({
+  installationIds: z.array(uuidSchema).min(1),
 });
 
 // Vendor management schemas
@@ -111,25 +111,27 @@ export const vendorLocationUpdateSchema = z.object({
   country: z.string().min(1).max(100).optional(),
 });
 
-export const vendorEquipmentCategoryCreateSchema = z.object({
+export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
+  type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
 });
 
-export const vendorEquipmentCategoryUpdateSchema = z.object({
+export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
 });
 
-export const vendorServiceCreateSchema = z.object({
+export const vendorInstallationCreateSchema = z.object({
   vendorLocationId: uuidSchema,
-  vendorEquipmentCategoryId: uuidSchema,
+  vendorModelId: uuidSchema,
   name: z.string().min(1).max(255),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Invalid price format"),
   currencyCode: z.string().length(3).optional(),
 });
 
-export const vendorServiceUpdateSchema = z.object({
+export const vendorInstallationUpdateSchema = z.object({
   vendorLocationId: uuidSchema.optional(),
-  vendorEquipmentCategoryId: uuidSchema.optional(),
+  vendorModelId: uuidSchema.optional(),
   name: z.string().min(1).max(255).optional(),
   price: z
     .string()
@@ -138,26 +140,26 @@ export const vendorServiceUpdateSchema = z.object({
   currencyCode: z.string().length(3).optional(),
 });
 
-export const vendorServiceControlCreateSchema = z.object({
-  vendorServiceId: uuidSchema,
+export const vendorInstallationControlCreateSchema = z.object({
+  vendorInstallationId: uuidSchema,
   pinNumber: z.number().int().min(1).max(5),
   duration: z.number().int().positive(),
 });
 
-export const vendorServiceControlUpdateSchema = z.object({
+export const vendorInstallationControlUpdateSchema = z.object({
   pinNumber: z.number().int().min(1).max(5).optional(),
   duration: z.number().int().positive().optional(),
 });
 
 export const vendorEquipmentCreateSchema = z.object({
   walletAddress: ethAddressSchema,
-  vendorServiceId: uuidSchema,
+  vendorInstallationId: uuidSchema,
   name: z.string().min(1).max(255),
 });
 
 export const vendorEquipmentUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  vendorServiceId: uuidSchema.optional(),
+  vendorInstallationId: uuidSchema.optional(),
 });
 
 // Entity schemas

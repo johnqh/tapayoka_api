@@ -3,13 +3,13 @@ import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorEquipmentCategories,
-  vendorServices,
+  vendorModels,
+  vendorInstallations,
   vendorLocations,
 } from "../../db/schema.ts";
 import {
-  vendorEquipmentCategoryCreateSchema,
-  vendorEquipmentCategoryUpdateSchema,
+  vendorModelCreateSchema,
+  vendorModelUpdateSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
@@ -22,10 +22,10 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const equipmentCategories = new Hono<AppEnv>();
+const models = new Hono<AppEnv>();
 
-/** GET / - List all equipment categories for the entity */
-equipmentCategories.get("/", async c => {
+/** GET / - List all models for the entity */
+models.get("/", async c => {
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
 
@@ -40,17 +40,17 @@ equipmentCategories.get("/", async c => {
   const db = getDb();
   const results = await db
     .select()
-    .from(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.entityId, result.entity.id));
+    .from(vendorModels)
+    .where(eq(vendorModels.entityId, result.entity.id));
   return c.json(successResponse(results));
 });
 
-/** GET /:id - Get a single equipment category */
-equipmentCategories.get("/:id", async c => {
+/** GET /:id - Get a single model */
+models.get("/:id", async c => {
   const id = c.req.param("id");
   const parsed = uuidSchema.safeParse(id);
   if (!parsed.success) {
-    return c.json(errorResponse("Invalid category ID"), 400);
+    return c.json(errorResponse("Invalid model ID"), 400);
   }
 
   const entitySlug = c.req.param("entitySlug");
@@ -65,23 +65,23 @@ equipmentCategories.get("/:id", async c => {
   }
 
   const db = getDb();
-  const [category] = await db
+  const [model] = await db
     .select()
-    .from(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.id, id))
+    .from(vendorModels)
+    .where(eq(vendorModels.id, id))
     .limit(1);
 
-  if (!category || category.entityId !== result.entity.id) {
-    return c.json(errorResponse("Category not found"), 404);
+  if (!model || model.entityId !== result.entity.id) {
+    return c.json(errorResponse("Model not found"), 404);
   }
 
-  return c.json(successResponse(category));
+  return c.json(successResponse(model));
 });
 
-/** POST / - Create a new equipment category */
-equipmentCategories.post(
+/** POST / - Create a new model */
+models.post(
   "/",
-  zValidator("json", vendorEquipmentCategoryCreateSchema),
+  zValidator("json", vendorModelCreateSchema),
   async c => {
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
@@ -96,19 +96,19 @@ equipmentCategories.post(
     }
 
     const db = getDb();
-    const [category] = await db
-      .insert(vendorEquipmentCategories)
+    const [model] = await db
+      .insert(vendorModels)
       .values({ ...data, entityId: result.entity.id })
       .returning();
 
-    return c.json(successResponse(category), 201);
+    return c.json(successResponse(model), 201);
   }
 );
 
-/** PUT /:id - Update an equipment category */
-equipmentCategories.put(
+/** PUT /:id - Update a model */
+models.put(
   "/:id",
-  zValidator("json", vendorEquipmentCategoryUpdateSchema),
+  zValidator("json", vendorModelUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
@@ -124,28 +124,28 @@ equipmentCategories.put(
     }
 
     const db = getDb();
-    const [category] = await db
+    const [model] = await db
       .select()
-      .from(vendorEquipmentCategories)
-      .where(eq(vendorEquipmentCategories.id, id))
+      .from(vendorModels)
+      .where(eq(vendorModels.id, id))
       .limit(1);
 
-    if (!category || category.entityId !== result.entity.id) {
-      return c.json(errorResponse("Category not found"), 404);
+    if (!model || model.entityId !== result.entity.id) {
+      return c.json(errorResponse("Model not found"), 404);
     }
 
     const [updated] = await db
-      .update(vendorEquipmentCategories)
+      .update(vendorModels)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorEquipmentCategories.id, id))
+      .where(eq(vendorModels.id, id))
       .returning();
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:id - Delete a category (409 if has services) */
-equipmentCategories.delete("/:id", async c => {
+/** DELETE /:id - Delete a model (409 if has installations) */
+models.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -159,40 +159,40 @@ equipmentCategories.delete("/:id", async c => {
   }
 
   const db = getDb();
-  const [category] = await db
+  const [model] = await db
     .select()
-    .from(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.id, id))
+    .from(vendorModels)
+    .where(eq(vendorModels.id, id))
     .limit(1);
 
-  if (!category || category.entityId !== result.entity.id) {
-    return c.json(errorResponse("Category not found"), 404);
+  if (!model || model.entityId !== result.entity.id) {
+    return c.json(errorResponse("Model not found"), 404);
   }
 
-  // Check for associated services
-  const [hasServices] = await db
+  // Check for associated installations
+  const [hasInstallations] = await db
     .select()
-    .from(vendorServices)
-    .where(eq(vendorServices.vendorEquipmentCategoryId, id))
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.vendorModelId, id))
     .limit(1);
 
-  if (hasServices) {
+  if (hasInstallations) {
     return c.json(
       errorResponse(
-        "Cannot delete category with associated services. Remove services first."
+        "Cannot delete model with associated installations. Remove installations first."
       ),
       409
     );
   }
 
   await db
-    .delete(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.id, id));
+    .delete(vendorModels)
+    .where(eq(vendorModels.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 
-/** GET /:id/services - Get services for a category */
-equipmentCategories.get("/:id/services", async c => {
+/** GET /:id/installations - Get installations for a model */
+models.get("/:id/installations", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -206,33 +206,33 @@ equipmentCategories.get("/:id/services", async c => {
   }
 
   const db = getDb();
-  const [category] = await db
+  const [model] = await db
     .select()
-    .from(vendorEquipmentCategories)
-    .where(eq(vendorEquipmentCategories.id, id))
+    .from(vendorModels)
+    .where(eq(vendorModels.id, id))
     .limit(1);
 
-  if (!category || category.entityId !== result.entity.id) {
-    return c.json(errorResponse("Category not found"), 404);
+  if (!model || model.entityId !== result.entity.id) {
+    return c.json(errorResponse("Model not found"), 404);
   }
 
   const results = await db
     .select({
-      service: vendorServices,
+      installation: vendorInstallations,
       locationName: vendorLocations.name,
     })
-    .from(vendorServices)
+    .from(vendorInstallations)
     .innerJoin(
       vendorLocations,
-      eq(vendorServices.vendorLocationId, vendorLocations.id)
+      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
     )
-    .where(eq(vendorServices.vendorEquipmentCategoryId, id));
+    .where(eq(vendorInstallations.vendorModelId, id));
 
   return c.json(
     successResponse(
-      results.map(r => ({ ...r.service, locationName: r.locationName }))
+      results.map(r => ({ ...r.installation, locationName: r.locationName }))
     )
   );
 });
 
-export default equipmentCategories;
+export default models;

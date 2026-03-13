@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { devices, deviceServices, services } from "../../db/schema.ts";
+import { devices, deviceInstallations, installations } from "../../db/schema.ts";
 import { verifySignature } from "../../services/crypto.ts";
 import { deviceVerifySchema } from "../../schemas/index.ts";
 import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
@@ -10,8 +10,8 @@ import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
 const buyerDevices = new Hono();
 
 /**
- * POST /verify - Verify device signature and get available services
- * Buyer sends device's signed challenge; server verifies and returns services.
+ * POST /verify - Verify device signature and get available installations
+ * Buyer sends device's signed challenge; server verifies and returns installations.
  */
 buyerDevices.post(
   "/verify",
@@ -47,22 +47,22 @@ buyerDevices.post(
       return c.json(errorResponse("Device is not active"), 400);
     }
 
-    // Get assigned services
-    const assignedServices = await db
-      .select({ service: services })
-      .from(deviceServices)
-      .innerJoin(services, eq(deviceServices.serviceId, services.id))
+    // Get assigned installations
+    const assignedInstallations = await db
+      .select({ installation: installations })
+      .from(deviceInstallations)
+      .innerJoin(installations, eq(deviceInstallations.installationId, installations.id))
       .where(
         and(
-          eq(deviceServices.deviceWalletAddress, deviceWalletAddress),
-          eq(services.active, true)
+          eq(deviceInstallations.deviceWalletAddress, deviceWalletAddress),
+          eq(installations.active, true)
         )
       );
 
     return c.json(
       successResponse({
         device,
-        services: assignedServices.map(r => r.service),
+        installations: assignedInstallations.map(r => r.installation),
       })
     );
   }

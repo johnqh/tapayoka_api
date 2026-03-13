@@ -2,10 +2,10 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { services } from "../../db/schema.ts";
+import { installations } from "../../db/schema.ts";
 import {
-  serviceCreateSchema,
-  serviceUpdateSchema,
+  installationCreateSchema,
+  installationUpdateSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
@@ -18,10 +18,10 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const vendorServices = new Hono<AppEnv>();
+const vendorInstallationsLegacy = new Hono<AppEnv>();
 
-/** GET / - List all services for the entity */
-vendorServices.get("/", async c => {
+/** GET / - List all installations for the entity */
+vendorInstallationsLegacy.get("/", async c => {
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
 
@@ -34,19 +34,19 @@ vendorServices.get("/", async c => {
   }
 
   const db = getDb();
-  const allServices = await db
+  const allInstallations = await db
     .select()
-    .from(services)
-    .where(eq(services.entityId, result.entity.id));
-  return c.json(successResponse(allServices));
+    .from(installations)
+    .where(eq(installations.entityId, result.entity.id));
+  return c.json(successResponse(allInstallations));
 });
 
-/** GET /:id - Get service by ID */
-vendorServices.get("/:id", async c => {
-  const serviceId = c.req.param("id");
-  const parsed = uuidSchema.safeParse(serviceId);
+/** GET /:id - Get installation by ID */
+vendorInstallationsLegacy.get("/:id", async c => {
+  const installationId = c.req.param("id");
+  const parsed = uuidSchema.safeParse(installationId);
   if (!parsed.success) {
-    return c.json(errorResponse("Invalid service ID"), 400);
+    return c.json(errorResponse("Invalid installation ID"), 400);
   }
 
   const entitySlug = c.req.param("entitySlug");
@@ -61,23 +61,23 @@ vendorServices.get("/:id", async c => {
   }
 
   const db = getDb();
-  const [service] = await db
+  const [installation] = await db
     .select()
-    .from(services)
+    .from(installations)
     .where(
-      and(eq(services.id, serviceId), eq(services.entityId, result.entity.id))
+      and(eq(installations.id, installationId), eq(installations.entityId, result.entity.id))
     )
     .limit(1);
 
-  if (!service) {
-    return c.json(errorResponse("Service not found"), 404);
+  if (!installation) {
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
-  return c.json(successResponse(service));
+  return c.json(successResponse(installation));
 });
 
-/** POST / - Create a new service */
-vendorServices.post("/", zValidator("json", serviceCreateSchema), async c => {
+/** POST / - Create a new installation */
+vendorInstallationsLegacy.post("/", zValidator("json", installationCreateSchema), async c => {
   const data = c.req.valid("json");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -93,38 +93,38 @@ vendorServices.post("/", zValidator("json", serviceCreateSchema), async c => {
   // Validate type-specific fields
   if (data.type === "TRIGGER" && (data.fixedMinutes || data.minutesPer25c)) {
     return c.json(
-      errorResponse("TRIGGER services must not have fixedMinutes or minutesPer25c"),
+      errorResponse("TRIGGER installations must not have fixedMinutes or minutesPer25c"),
       400
     );
   }
   if (data.type === "FIXED" && !data.fixedMinutes) {
     return c.json(
-      errorResponse("FIXED services require fixedMinutes"),
+      errorResponse("FIXED installations require fixedMinutes"),
       400
     );
   }
   if (data.type === "VARIABLE" && !data.minutesPer25c) {
     return c.json(
-      errorResponse("VARIABLE services require minutesPer25c"),
+      errorResponse("VARIABLE installations require minutesPer25c"),
       400
     );
   }
 
   const db = getDb();
-  const [service] = await db
-    .insert(services)
+  const [installation] = await db
+    .insert(installations)
     .values({ ...data, entityId: result.entity.id })
     .returning();
 
-  return c.json(successResponse(service), 201);
+  return c.json(successResponse(installation), 201);
 });
 
-/** PUT /:id - Update a service */
-vendorServices.put(
+/** PUT /:id - Update an installation */
+vendorInstallationsLegacy.put(
   "/:id",
-  zValidator("json", serviceUpdateSchema),
+  zValidator("json", installationUpdateSchema),
   async c => {
-    const serviceId = c.req.param("id");
+    const installationId = c.req.param("id");
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
     const userId = c.get("firebaseUid");
@@ -139,27 +139,27 @@ vendorServices.put(
 
     const db = getDb();
     const [updated] = await db
-      .update(services)
+      .update(installations)
       .set({ ...data, updatedAt: new Date() })
       .where(
         and(
-          eq(services.id, serviceId),
-          eq(services.entityId, result.entity.id)
+          eq(installations.id, installationId),
+          eq(installations.entityId, result.entity.id)
         )
       )
       .returning();
 
     if (!updated) {
-      return c.json(errorResponse("Service not found"), 404);
+      return c.json(errorResponse("Installation not found"), 404);
     }
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:id - Delete a service */
-vendorServices.delete("/:id", async c => {
-  const serviceId = c.req.param("id");
+/** DELETE /:id - Delete an installation */
+vendorInstallationsLegacy.delete("/:id", async c => {
+  const installationId = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
 
@@ -173,20 +173,20 @@ vendorServices.delete("/:id", async c => {
 
   const db = getDb();
   const [deleted] = await db
-    .delete(services)
+    .delete(installations)
     .where(
       and(
-        eq(services.id, serviceId),
-        eq(services.entityId, result.entity.id)
+        eq(installations.id, installationId),
+        eq(installations.entityId, result.entity.id)
       )
     )
     .returning();
 
   if (!deleted) {
-    return c.json(errorResponse("Service not found"), 404);
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
   return c.json(successResponse({ deleted: true }));
 });
 
-export default vendorServices;
+export default vendorInstallationsLegacy;

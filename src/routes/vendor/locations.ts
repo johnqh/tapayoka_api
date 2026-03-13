@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorLocations,
-  vendorServices,
-  vendorEquipmentCategories,
+  vendorInstallations,
+  vendorModels,
 } from "../../db/schema.ts";
 import {
   vendorLocationCreateSchema,
@@ -144,7 +144,7 @@ locations.put(
   }
 );
 
-/** DELETE /:id - Delete a location (409 if has services) */
+/** DELETE /:id - Delete a location (409 if has installations) */
 locations.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
@@ -169,17 +169,17 @@ locations.delete("/:id", async c => {
     return c.json(errorResponse("Location not found"), 404);
   }
 
-  // Check for associated services
-  const [hasServices] = await db
+  // Check for associated installations
+  const [hasInstallations] = await db
     .select()
-    .from(vendorServices)
-    .where(eq(vendorServices.vendorLocationId, id))
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.vendorLocationId, id))
     .limit(1);
 
-  if (hasServices) {
+  if (hasInstallations) {
     return c.json(
       errorResponse(
-        "Cannot delete location with associated services. Remove services first."
+        "Cannot delete location with associated installations. Remove installations first."
       ),
       409
     );
@@ -189,8 +189,8 @@ locations.delete("/:id", async c => {
   return c.json(successResponse({ deleted: true }));
 });
 
-/** GET /:id/services - Get services for a location */
-locations.get("/:id/services", async c => {
+/** GET /:id/installations - Get installations for a location */
+locations.get("/:id/installations", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -216,19 +216,19 @@ locations.get("/:id/services", async c => {
 
   const results = await db
     .select({
-      service: vendorServices,
-      categoryName: vendorEquipmentCategories.name,
+      installation: vendorInstallations,
+      modelName: vendorModels.name,
     })
-    .from(vendorServices)
+    .from(vendorInstallations)
     .innerJoin(
-      vendorEquipmentCategories,
-      eq(vendorServices.vendorEquipmentCategoryId, vendorEquipmentCategories.id)
+      vendorModels,
+      eq(vendorInstallations.vendorModelId, vendorModels.id)
     )
-    .where(eq(vendorServices.vendorLocationId, id));
+    .where(eq(vendorInstallations.vendorLocationId, id));
 
   return c.json(
     successResponse(
-      results.map(r => ({ ...r.service, categoryName: r.categoryName }))
+      results.map(r => ({ ...r.installation, modelName: r.modelName }))
     )
   );
 });

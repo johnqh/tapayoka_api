@@ -3,14 +3,14 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorServices,
+  vendorInstallations,
   vendorLocations,
-  vendorEquipmentCategories,
+  vendorModels,
   vendorEquipments,
 } from "../../db/schema.ts";
 import {
-  vendorServiceCreateSchema,
-  vendorServiceUpdateSchema,
+  vendorInstallationCreateSchema,
+  vendorInstallationUpdateSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
@@ -23,14 +23,14 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const vendorServicesRoute = new Hono<AppEnv>();
+const vendorInstallationsRoute = new Hono<AppEnv>();
 
-/** GET /:id - Get a single vendor service */
-vendorServicesRoute.get("/:id", async c => {
+/** GET /:id - Get a single vendor installation */
+vendorInstallationsRoute.get("/:id", async c => {
   const id = c.req.param("id");
   const parsed = uuidSchema.safeParse(id);
   if (!parsed.success) {
-    return c.json(errorResponse("Invalid service ID"), 400);
+    return c.json(errorResponse("Invalid installation ID"), 400);
   }
 
   const entitySlug = c.req.param("entitySlug");
@@ -46,33 +46,33 @@ vendorServicesRoute.get("/:id", async c => {
 
   const db = getDb();
 
-  // Verify service belongs to entity via location
-  const [svcResult] = await db
-    .select({ service: vendorServices })
-    .from(vendorServices)
+  // Verify installation belongs to entity via location
+  const [instResult] = await db
+    .select({ installation: vendorInstallations })
+    .from(vendorInstallations)
     .innerJoin(
       vendorLocations,
-      eq(vendorServices.vendorLocationId, vendorLocations.id)
+      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorServices.id, id),
+        eq(vendorInstallations.id, id),
         eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);
 
-  if (!svcResult) {
-    return c.json(errorResponse("Service not found"), 404);
+  if (!instResult) {
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
-  return c.json(successResponse(svcResult.service));
+  return c.json(successResponse(instResult.installation));
 });
 
-/** POST / - Create a new vendor service */
-vendorServicesRoute.post(
+/** POST / - Create a new vendor installation */
+vendorInstallationsRoute.post(
   "/",
-  zValidator("json", vendorServiceCreateSchema),
+  zValidator("json", vendorInstallationCreateSchema),
   async c => {
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
@@ -104,32 +104,32 @@ vendorServicesRoute.post(
       return c.json(errorResponse("Location not found"), 404);
     }
 
-    // Verify category belongs to entity
-    const [category] = await db
+    // Verify model belongs to entity
+    const [model] = await db
       .select()
-      .from(vendorEquipmentCategories)
+      .from(vendorModels)
       .where(
         and(
-          eq(vendorEquipmentCategories.id, data.vendorEquipmentCategoryId),
-          eq(vendorEquipmentCategories.entityId, result.entity.id)
+          eq(vendorModels.id, data.vendorModelId),
+          eq(vendorModels.entityId, result.entity.id)
         )
       )
       .limit(1);
 
-    if (!category) {
-      return c.json(errorResponse("Category not found"), 404);
+    if (!model) {
+      return c.json(errorResponse("Model not found"), 404);
     }
 
     // Check unique constraint before insert
     const [existing] = await db
       .select()
-      .from(vendorServices)
+      .from(vendorInstallations)
       .where(
         and(
-          eq(vendorServices.vendorLocationId, data.vendorLocationId),
+          eq(vendorInstallations.vendorLocationId, data.vendorLocationId),
           eq(
-            vendorServices.vendorEquipmentCategoryId,
-            data.vendorEquipmentCategoryId
+            vendorInstallations.vendorModelId,
+            data.vendorModelId
           )
         )
       )
@@ -138,25 +138,25 @@ vendorServicesRoute.post(
     if (existing) {
       return c.json(
         errorResponse(
-          "A service already exists for this location and category combination"
+          "An installation already exists for this location and model combination"
         ),
         409
       );
     }
 
-    const [service] = await db
-      .insert(vendorServices)
+    const [installation] = await db
+      .insert(vendorInstallations)
       .values(data)
       .returning();
 
-    return c.json(successResponse(service), 201);
+    return c.json(successResponse(installation), 201);
   }
 );
 
-/** PUT /:id - Update a vendor service */
-vendorServicesRoute.put(
+/** PUT /:id - Update a vendor installation */
+vendorInstallationsRoute.put(
   "/:id",
-  zValidator("json", vendorServiceUpdateSchema),
+  zValidator("json", vendorInstallationUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
@@ -175,36 +175,36 @@ vendorServicesRoute.put(
 
     // Verify ownership via location join
     const [existing] = await db
-      .select({ service: vendorServices })
-      .from(vendorServices)
+      .select({ installation: vendorInstallations })
+      .from(vendorInstallations)
       .innerJoin(
         vendorLocations,
-        eq(vendorServices.vendorLocationId, vendorLocations.id)
+        eq(vendorInstallations.vendorLocationId, vendorLocations.id)
       )
       .where(
         and(
-          eq(vendorServices.id, id),
+          eq(vendorInstallations.id, id),
           eq(vendorLocations.entityId, result.entity.id)
         )
       )
       .limit(1);
 
     if (!existing) {
-      return c.json(errorResponse("Service not found"), 404);
+      return c.json(errorResponse("Installation not found"), 404);
     }
 
     const [updated] = await db
-      .update(vendorServices)
+      .update(vendorInstallations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorServices.id, id))
+      .where(eq(vendorInstallations.id, id))
       .returning();
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:id - Delete a vendor service (409 if has equipments; controls cascade) */
-vendorServicesRoute.delete("/:id", async c => {
+/** DELETE /:id - Delete a vendor installation (409 if has equipments; controls cascade) */
+vendorInstallationsRoute.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -221,43 +221,43 @@ vendorServicesRoute.delete("/:id", async c => {
 
   // Verify ownership via location join
   const [existing] = await db
-    .select({ service: vendorServices })
-    .from(vendorServices)
+    .select({ installation: vendorInstallations })
+    .from(vendorInstallations)
     .innerJoin(
       vendorLocations,
-      eq(vendorServices.vendorLocationId, vendorLocations.id)
+      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorServices.id, id),
+        eq(vendorInstallations.id, id),
         eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);
 
   if (!existing) {
-    return c.json(errorResponse("Service not found"), 404);
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
   // Check for associated equipments
   const [hasEquipments] = await db
     .select()
     .from(vendorEquipments)
-    .where(eq(vendorEquipments.vendorServiceId, id))
+    .where(eq(vendorEquipments.vendorInstallationId, id))
     .limit(1);
 
   if (hasEquipments) {
     return c.json(
       errorResponse(
-        "Cannot delete service with associated equipment. Remove equipment first."
+        "Cannot delete installation with associated equipment. Remove equipment first."
       ),
       409
     );
   }
 
   // Controls cascade-delete via FK
-  await db.delete(vendorServices).where(eq(vendorServices.id, id));
+  await db.delete(vendorInstallations).where(eq(vendorInstallations.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 
-export default vendorServicesRoute;
+export default vendorInstallationsRoute;

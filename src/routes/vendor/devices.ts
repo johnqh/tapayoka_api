@@ -4,13 +4,13 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   devices,
-  deviceServices,
-  services,
+  deviceInstallations,
+  installations,
 } from "../../db/schema.ts";
 import {
   deviceCreateSchema,
   deviceUpdateSchema,
-  deviceServiceAssignSchema,
+  deviceInstallationAssignSchema,
   ethAddressSchema,
 } from "../../schemas/index.ts";
 import { getServerAddress } from "../../services/crypto.ts";
@@ -194,8 +194,8 @@ vendorDevices.delete("/:walletAddress", async c => {
   return c.json(successResponse({ deleted: true }));
 });
 
-/** GET /:walletAddress/services - Get services assigned to device */
-vendorDevices.get("/:walletAddress/services", async c => {
+/** GET /:walletAddress/installations - Get installations assigned to device */
+vendorDevices.get("/:walletAddress/installations", async c => {
   const walletAddress = c.req.param("walletAddress");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -227,21 +227,21 @@ vendorDevices.get("/:walletAddress/services", async c => {
   }
 
   const assigned = await db
-    .select({ service: services })
-    .from(deviceServices)
-    .innerJoin(services, eq(deviceServices.serviceId, services.id))
-    .where(eq(deviceServices.deviceWalletAddress, walletAddress));
+    .select({ installation: installations })
+    .from(deviceInstallations)
+    .innerJoin(installations, eq(deviceInstallations.installationId, installations.id))
+    .where(eq(deviceInstallations.deviceWalletAddress, walletAddress));
 
-  return c.json(successResponse(assigned.map(r => r.service)));
+  return c.json(successResponse(assigned.map(r => r.installation)));
 });
 
-/** PUT /:walletAddress/services - Assign services to device (replace all) */
+/** PUT /:walletAddress/installations - Assign installations to device (replace all) */
 vendorDevices.put(
-  "/:walletAddress/services",
-  zValidator("json", deviceServiceAssignSchema),
+  "/:walletAddress/installations",
+  zValidator("json", deviceInstallationAssignSchema),
   async c => {
     const walletAddress = c.req.param("walletAddress");
-    const { serviceIds } = c.req.valid("json");
+    const { installationIds } = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
     const userId = c.get("firebaseUid");
 
@@ -273,20 +273,20 @@ vendorDevices.put(
 
     // Delete existing assignments
     await db
-      .delete(deviceServices)
-      .where(eq(deviceServices.deviceWalletAddress, walletAddress));
+      .delete(deviceInstallations)
+      .where(eq(deviceInstallations.deviceWalletAddress, walletAddress));
 
     // Insert new assignments
-    if (serviceIds.length > 0) {
-      await db.insert(deviceServices).values(
-        serviceIds.map(serviceId => ({
+    if (installationIds.length > 0) {
+      await db.insert(deviceInstallations).values(
+        installationIds.map(installationId => ({
           deviceWalletAddress: walletAddress,
-          serviceId,
+          installationId,
         }))
       );
     }
 
-    return c.json(successResponse({ assigned: serviceIds.length }));
+    return c.json(successResponse({ assigned: installationIds.length }));
   }
 );
 

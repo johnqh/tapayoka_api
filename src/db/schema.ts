@@ -24,7 +24,7 @@ export const tapayoka = pgSchema("tapayoka");
 // Enums
 // =============================================================================
 
-export const serviceTypeEnum = tapayoka.enum("service_type", [
+export const installationTypeEnum = tapayoka.enum("installation_type", [
   "TRIGGER",
   "FIXED",
   "VARIABLE",
@@ -51,6 +51,14 @@ export const userRoleEnum = tapayoka.enum("user_role", ["vendor", "buyer"]);
 export const logDirectionEnum = tapayoka.enum("log_direction", [
   "PI_TO_SRV",
   "SRV_TO_PI",
+]);
+
+export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
+  "Washer",
+  "Dryer",
+  "Parking",
+  "Locker",
+  "Vending",
 ]);
 
 // =============================================================================
@@ -97,8 +105,8 @@ export const devices = tapayoka.table(
   table => [index("devices_entity_idx").on(table.entityId)]
 );
 
-export const services = tapayoka.table(
-  "services",
+export const installations = tapayoka.table(
+  "installations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     entityId: uuid("entity_id")
@@ -106,7 +114,7 @@ export const services = tapayoka.table(
       .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    type: serviceTypeEnum("type").notNull(),
+    type: installationTypeEnum("type").notNull(),
     priceCents: integer("price_cents").notNull(),
     fixedMinutes: integer("fixed_minutes"),
     minutesPer25c: integer("minutes_per_25c"),
@@ -114,23 +122,23 @@ export const services = tapayoka.table(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  table => [index("services_entity_idx").on(table.entityId)]
+  table => [index("installations_entity_idx").on(table.entityId)]
 );
 
-export const deviceServices = tapayoka.table(
-  "device_services",
+export const deviceInstallations = tapayoka.table(
+  "device_installations",
   {
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
       .references(() => devices.walletAddress, { onDelete: "cascade" }),
-    serviceId: uuid("service_id")
+    installationId: uuid("installation_id")
       .notNull()
-      .references(() => services.id, { onDelete: "cascade" }),
+      .references(() => installations.id, { onDelete: "cascade" }),
   },
   table => [
-    unique("device_services_unique").on(
+    unique("device_installations_unique").on(
       table.deviceWalletAddress,
-      table.serviceId
+      table.installationId
     ),
   ]
 );
@@ -142,9 +150,9 @@ export const orders = tapayoka.table(
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
       .references(() => devices.walletAddress),
-    serviceId: uuid("service_id")
+    installationId: uuid("installation_id")
       .notNull()
-      .references(() => services.id),
+      .references(() => installations.id),
     buyerUid: varchar("buyer_uid", { length: 128 }),
     amountCents: integer("amount_cents").notNull(),
     authorizedSeconds: integer("authorized_seconds").notNull().default(0),
@@ -229,32 +237,33 @@ export const vendorLocations = tapayoka.table(
   table => [index("vendor_locations_entity_idx").on(table.entityId)]
 );
 
-export const vendorEquipmentCategories = tapayoka.table(
-  "vendor_equipment_categories",
+export const vendorModels = tapayoka.table(
+  "vendor_models",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     entityId: uuid("entity_id")
       .notNull()
       .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
+    type: vendorModelTypeEnum("type"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_equipment_categories_entity_idx").on(table.entityId),
+    index("vendor_models_entity_idx").on(table.entityId),
   ]
 );
 
-export const vendorServices = tapayoka.table(
-  "vendor_services",
+export const vendorInstallations = tapayoka.table(
+  "vendor_installations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     vendorLocationId: uuid("vendor_location_id")
       .notNull()
       .references(() => vendorLocations.id),
-    vendorEquipmentCategoryId: uuid("vendor_equipment_category_id")
+    vendorModelId: uuid("vendor_model_id")
       .notNull()
-      .references(() => vendorEquipmentCategories.id),
+      .references(() => vendorModels.id),
     name: varchar("name", { length: 255 }).notNull(),
     price: numeric("price", { precision: 10, scale: 2 }).notNull(),
     currencyCode: varchar("currency_code", { length: 3 })
@@ -264,27 +273,27 @@ export const vendorServices = tapayoka.table(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    unique("vendor_services_location_category_unique").on(
+    unique("vendor_installations_location_model_unique").on(
       table.vendorLocationId,
-      table.vendorEquipmentCategoryId
+      table.vendorModelId
     ),
-    index("vendor_services_location_idx").on(table.vendorLocationId),
-    index("vendor_services_category_idx").on(table.vendorEquipmentCategoryId),
+    index("vendor_installations_location_idx").on(table.vendorLocationId),
+    index("vendor_installations_model_idx").on(table.vendorModelId),
   ]
 );
 
-export const vendorServiceControls = tapayoka.table(
-  "vendor_service_controls",
+export const vendorInstallationControls = tapayoka.table(
+  "vendor_installation_controls",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    vendorServiceId: uuid("vendor_service_id")
+    vendorInstallationId: uuid("vendor_installation_id")
       .notNull()
-      .references(() => vendorServices.id, { onDelete: "cascade" }),
+      .references(() => vendorInstallations.id, { onDelete: "cascade" }),
     pinNumber: integer("pin_number").notNull(),
     duration: integer("duration").notNull(),
   },
   table => [
-    index("vendor_service_controls_service_idx").on(table.vendorServiceId),
+    index("vendor_installation_controls_installation_idx").on(table.vendorInstallationId),
   ]
 );
 
@@ -294,14 +303,14 @@ export const vendorEquipments = tapayoka.table(
     walletAddress: varchar("wallet_address", { length: 42 })
       .primaryKey()
       .notNull(),
-    vendorServiceId: uuid("vendor_service_id")
+    vendorInstallationId: uuid("vendor_installation_id")
       .notNull()
-      .references(() => vendorServices.id),
+      .references(() => vendorInstallations.id),
     name: varchar("name", { length: 255 }).notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_equipments_service_idx").on(table.vendorServiceId),
+    index("vendor_equipments_installation_idx").on(table.vendorInstallationId),
   ]
 );

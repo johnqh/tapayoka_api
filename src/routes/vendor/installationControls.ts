@@ -3,13 +3,13 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorServiceControls,
-  vendorServices,
+  vendorInstallationControls,
+  vendorInstallations,
   vendorLocations,
 } from "../../db/schema.ts";
 import {
-  vendorServiceControlCreateSchema,
-  vendorServiceControlUpdateSchema,
+  vendorInstallationControlCreateSchema,
+  vendorInstallationControlUpdateSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
@@ -22,24 +22,24 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const serviceControls = new Hono<AppEnv>();
+const installationControls = new Hono<AppEnv>();
 
-/** Helper: verify service belongs to entity via location */
-async function verifyServiceOwnership(
+/** Helper: verify installation belongs to entity via location */
+async function verifyInstallationOwnership(
   db: ReturnType<typeof getDb>,
-  serviceId: string,
+  installationId: string,
   entityId: string
 ) {
   const [result] = await db
-    .select({ service: vendorServices })
-    .from(vendorServices)
+    .select({ installation: vendorInstallations })
+    .from(vendorInstallations)
     .innerJoin(
       vendorLocations,
-      eq(vendorServices.vendorLocationId, vendorLocations.id)
+      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorServices.id, serviceId),
+        eq(vendorInstallations.id, installationId),
         eq(vendorLocations.entityId, entityId)
       )
     )
@@ -47,12 +47,12 @@ async function verifyServiceOwnership(
   return !!result;
 }
 
-/** GET /service/:serviceId - Get all controls for a service */
-serviceControls.get("/service/:serviceId", async c => {
-  const serviceId = c.req.param("serviceId");
-  const parsed = uuidSchema.safeParse(serviceId);
+/** GET /installation/:installationId - Get all controls for an installation */
+installationControls.get("/installation/:installationId", async c => {
+  const installationId = c.req.param("installationId");
+  const parsed = uuidSchema.safeParse(installationId);
   if (!parsed.success) {
-    return c.json(errorResponse("Invalid service ID"), 400);
+    return c.json(errorResponse("Invalid installation ID"), 400);
   }
 
   const entitySlug = c.req.param("entitySlug");
@@ -67,23 +67,23 @@ serviceControls.get("/service/:serviceId", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyServiceOwnership(db, serviceId, result.entity.id);
+  const owned = await verifyInstallationOwnership(db, installationId, result.entity.id);
   if (!owned) {
-    return c.json(errorResponse("Service not found"), 404);
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
   const results = await db
     .select()
-    .from(vendorServiceControls)
-    .where(eq(vendorServiceControls.vendorServiceId, serviceId));
+    .from(vendorInstallationControls)
+    .where(eq(vendorInstallationControls.vendorInstallationId, installationId));
 
   return c.json(successResponse(results));
 });
 
-/** POST / - Create a new service control */
-serviceControls.post(
+/** POST / - Create a new installation control */
+installationControls.post(
   "/",
-  zValidator("json", vendorServiceControlCreateSchema),
+  zValidator("json", vendorInstallationControlCreateSchema),
   async c => {
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
@@ -98,17 +98,17 @@ serviceControls.post(
     }
 
     const db = getDb();
-    const owned = await verifyServiceOwnership(
+    const owned = await verifyInstallationOwnership(
       db,
-      data.vendorServiceId,
+      data.vendorInstallationId,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Service not found"), 404);
+      return c.json(errorResponse("Installation not found"), 404);
     }
 
     const [control] = await db
-      .insert(vendorServiceControls)
+      .insert(vendorInstallationControls)
       .values(data)
       .returning();
 
@@ -116,10 +116,10 @@ serviceControls.post(
   }
 );
 
-/** PUT /:id - Update a service control */
-serviceControls.put(
+/** PUT /:id - Update an installation control */
+installationControls.put(
   "/:id",
-  zValidator("json", vendorServiceControlUpdateSchema),
+  zValidator("json", vendorInstallationControlUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
@@ -137,35 +137,35 @@ serviceControls.put(
     const db = getDb();
     const [control] = await db
       .select()
-      .from(vendorServiceControls)
-      .where(eq(vendorServiceControls.id, id))
+      .from(vendorInstallationControls)
+      .where(eq(vendorInstallationControls.id, id))
       .limit(1);
 
     if (!control) {
-      return c.json(errorResponse("Service control not found"), 404);
+      return c.json(errorResponse("Installation control not found"), 404);
     }
 
-    const owned = await verifyServiceOwnership(
+    const owned = await verifyInstallationOwnership(
       db,
-      control.vendorServiceId,
+      control.vendorInstallationId,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Service control not found"), 404);
+      return c.json(errorResponse("Installation control not found"), 404);
     }
 
     const [updated] = await db
-      .update(vendorServiceControls)
+      .update(vendorInstallationControls)
       .set(data)
-      .where(eq(vendorServiceControls.id, id))
+      .where(eq(vendorInstallationControls.id, id))
       .returning();
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:id - Delete a service control */
-serviceControls.delete("/:id", async c => {
+/** DELETE /:id - Delete an installation control */
+installationControls.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -181,27 +181,27 @@ serviceControls.delete("/:id", async c => {
   const db = getDb();
   const [control] = await db
     .select()
-    .from(vendorServiceControls)
-    .where(eq(vendorServiceControls.id, id))
+    .from(vendorInstallationControls)
+    .where(eq(vendorInstallationControls.id, id))
     .limit(1);
 
   if (!control) {
-    return c.json(errorResponse("Service control not found"), 404);
+    return c.json(errorResponse("Installation control not found"), 404);
   }
 
-  const owned = await verifyServiceOwnership(
+  const owned = await verifyInstallationOwnership(
     db,
-    control.vendorServiceId,
+    control.vendorInstallationId,
     result.entity.id
   );
   if (!owned) {
-    return c.json(errorResponse("Service control not found"), 404);
+    return c.json(errorResponse("Installation control not found"), 404);
   }
 
   await db
-    .delete(vendorServiceControls)
-    .where(eq(vendorServiceControls.id, id));
+    .delete(vendorInstallationControls)
+    .where(eq(vendorInstallationControls.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 
-export default serviceControls;
+export default installationControls;
