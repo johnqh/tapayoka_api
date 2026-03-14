@@ -281,11 +281,24 @@ export async function initDatabase() {
   // Add type column to vendor_models (nullable)
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
 
-  // Add pricing enum and column to vendor_models (nullable)
+  // Add enums and columns to vendor_models
   await connection.unsafe(`
-    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'variableAtStart', 'variableAtEnd'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'variable'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_action AS ENUM ('timed', 'sequence'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_interruption AS ENUM ('stop', 'continue'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_payment AS ENUM ('atStart', 'atEnd'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `);
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS pricing tapayoka.vendor_model_pricing`;
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS action tapayoka.vendor_model_action`;
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS interruption tapayoka.vendor_model_interruption`;
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS payment tapayoka.vendor_model_payment`;
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS schedule JSONB`;
 
   // Rename vendor columns
   await connection.unsafe(`

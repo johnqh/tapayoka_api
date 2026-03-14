@@ -63,8 +63,22 @@ export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
 
 export const vendorModelPricingEnum = tapayoka.enum("vendor_model_pricing", [
   "fixed",
-  "variableAtStart",
-  "variableAtEnd",
+  "variable",
+]);
+
+export const vendorModelActionEnum = tapayoka.enum("vendor_model_action", [
+  "timed",
+  "sequence",
+]);
+
+export const vendorModelInterruptionEnum = tapayoka.enum("vendor_model_interruption", [
+  "stop",
+  "continue",
+]);
+
+export const vendorModelPaymentEnum = tapayoka.enum("vendor_model_payment", [
+  "atStart",
+  "atEnd",
 ]);
 
 // =============================================================================
@@ -253,6 +267,10 @@ export const vendorModels = tapayoka.table(
     name: varchar("name", { length: 255 }).notNull(),
     type: vendorModelTypeEnum("type"),
     pricing: vendorModelPricingEnum("pricing"),
+    action: vendorModelActionEnum("action"),
+    interruption: vendorModelInterruptionEnum("interruption"),
+    payment: vendorModelPaymentEnum("payment"),
+    schedule: jsonb("schedule"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

@@ -111,16 +111,30 @@ export const vendorLocationUpdateSchema = z.object({
   country: z.string().min(1).max(100).optional(),
 });
 
+const dailyScheduleSchema = z.object({
+  dayOfWeek: z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+});
+
 export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "variableAtStart", "variableAtEnd"]).optional(),
+  pricing: z.enum(["fixed", "variable"]).optional(),
+  action: z.enum(["timed", "sequence"]).optional(),
+  interruption: z.enum(["stop", "continue"]).optional(),
+  payment: z.enum(["atStart", "atEnd"]).optional(),
+  schedule: z.array(dailyScheduleSchema).optional(),
 });
 
 export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "variableAtStart", "variableAtEnd"]).optional(),
+  pricing: z.enum(["fixed", "variable"]).optional(),
+  action: z.enum(["timed", "sequence"]).optional(),
+  interruption: z.enum(["stop", "continue"]).optional(),
+  payment: z.enum(["atStart", "atEnd"]).optional(),
+  schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
 export const vendorInstallationCreateSchema = z.object({
