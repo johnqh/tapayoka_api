@@ -7,7 +7,6 @@ import {
   boolean,
   timestamp,
   jsonb,
-  numeric,
   index,
   unique,
 } from "drizzle-orm/pg-core";
@@ -79,6 +78,11 @@ export const vendorModelInterruptionEnum = tapayoka.enum("vendor_model_interrupt
 export const vendorModelPaymentEnum = tapayoka.enum("vendor_model_payment", [
   "atStart",
   "atEnd",
+]);
+
+export const vendorModelSlotEnum = tapayoka.enum("vendor_model_slot", [
+  "single",
+  "multi",
 ]);
 
 // =============================================================================
@@ -267,6 +271,7 @@ export const vendorModels = tapayoka.table(
     name: varchar("name", { length: 255 }).notNull(),
     type: vendorModelTypeEnum("type"),
     pricing: vendorModelPricingEnum("pricing"),
+    slot: vendorModelSlotEnum("slot"),
     action: vendorModelActionEnum("action"),
     interruption: vendorModelInterruptionEnum("interruption"),
     payment: vendorModelPaymentEnum("payment"),
@@ -290,10 +295,7 @@ export const vendorInstallations = tapayoka.table(
       .notNull()
       .references(() => vendorModels.id),
     name: varchar("name", { length: 255 }).notNull(),
-    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-    currencyCode: varchar("currency_code", { length: 3 })
-      .notNull()
-      .default("USD"),
+    pricing: jsonb("pricing").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

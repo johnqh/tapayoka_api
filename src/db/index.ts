@@ -218,8 +218,7 @@ export async function initDatabase() {
       vendor_location_id UUID NOT NULL REFERENCES tapayoka.vendor_locations(id),
       vendor_model_id UUID NOT NULL REFERENCES tapayoka.vendor_models(id),
       name VARCHAR(255) NOT NULL,
-      price NUMERIC(10,2) NOT NULL,
-      currency_code VARCHAR(3) NOT NULL DEFAULT 'USD',
+      pricing JSONB NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(vendor_location_id, vendor_model_id)
@@ -282,6 +281,16 @@ export async function initDatabase() {
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
 
   // Add enums and columns to vendor_models
+  // Recreate pricing enum if it has old values (variableAtStart/variableAtEnd → variable)
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'variableAtStart' AND enumtypid = 'tapayoka.vendor_model_pricing'::regtype) THEN
+        ALTER TABLE tapayoka.vendor_models DROP COLUMN IF EXISTS pricing;
+        DROP TYPE tapayoka.vendor_model_pricing;
+      END IF;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $$;
+  `);
   await connection.unsafe(`
     DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'variable'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `);
@@ -309,6 +318,34 @@ export async function initDatabase() {
   `);
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_equipments RENAME COLUMN vendor_service_id TO vendor_installation_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+  `);
+
+  // Add slot enum + column to vendor_models
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_slot AS ENUM ('single', 'multi'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS slot tapayoka.vendor_model_slot`;
+
+  // Migrate vendor_installations: add pricing JSONB, migrate existing data, drop old columns
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'tapayoka' AND table_name = 'vendor_installations' AND column_name = 'price') THEN
+        ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing JSONB;
+        UPDATE tapayoka.vendor_installations vi SET pricing = jsonb_build_object(
+          'type', 'fixed',
+          'currencyCode', vi.currency_code,
+          'price', vi.price::text,
+          'signals', COALESCE(
+            (SELECT jsonb_agg(jsonb_build_object('pinNumber', vic.pin_number, 'duration', vic.duration))
+             FROM tapayoka.vendor_installation_controls vic WHERE vic.vendor_installation_id = vi.id),
+            '[]'::jsonb
+          )
+        ) WHERE vi.pricing IS NULL;
+        ALTER TABLE tapayoka.vendor_installations ALTER COLUMN pricing SET NOT NULL;
+        ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS price;
+        ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS currency_code;
+      END IF;
+    END $$;
   `);
 
   // Create indexes
