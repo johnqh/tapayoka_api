@@ -252,8 +252,12 @@ export async function initDatabase() {
   `);
 
   // Rename legacy tables
-  await connection`ALTER TABLE IF EXISTS tapayoka.services RENAME TO installations`;
-  await connection`ALTER TABLE IF EXISTS tapayoka.device_services RENAME TO device_installations`;
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.services RENAME TO installations; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.device_services RENAME TO device_installations; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
 
   // Rename legacy columns
   await connection.unsafe(`
@@ -264,9 +268,15 @@ export async function initDatabase() {
   `);
 
   // Rename vendor tables
-  await connection`ALTER TABLE IF EXISTS tapayoka.vendor_equipment_categories RENAME TO vendor_models`;
-  await connection`ALTER TABLE IF EXISTS tapayoka.vendor_services RENAME TO vendor_installations`;
-  await connection`ALTER TABLE IF EXISTS tapayoka.vendor_service_controls RENAME TO vendor_installation_controls`;
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_equipment_categories RENAME TO vendor_models; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_services RENAME TO vendor_installations; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_service_controls RENAME TO vendor_installation_controls; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
 
   // Add type column to vendor_models (nullable)
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
