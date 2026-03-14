@@ -61,6 +61,12 @@ export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
   "Vending",
 ]);
 
+export const vendorModelPricingEnum = tapayoka.enum("vendor_model_pricing", [
+  "fixed",
+  "variableAtStart",
+  "variableAtEnd",
+]);
+
 // =============================================================================
 // Entity Tables (from entity_service)
 // =============================================================================
@@ -246,6 +252,7 @@ export const vendorModels = tapayoka.table(
       .references(() => entities.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     type: vendorModelTypeEnum("type"),
+    pricing: vendorModelPricingEnum("pricing"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

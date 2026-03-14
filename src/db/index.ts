@@ -281,6 +281,12 @@ export async function initDatabase() {
   // Add type column to vendor_models (nullable)
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
 
+  // Add pricing enum and column to vendor_models (nullable)
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'variableAtStart', 'variableAtEnd'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS pricing tapayoka.vendor_model_pricing`;
+
   // Rename vendor columns
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_equipment_category_id TO vendor_model_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;

@@ -114,11 +114,13 @@ export const vendorLocationUpdateSchema = z.object({
 export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
+  pricing: z.enum(["fixed", "variableAtStart", "variableAtEnd"]).optional(),
 });
 
 export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
+  pricing: z.enum(["fixed", "variableAtStart", "variableAtEnd"]).optional(),
 });
 
 export const vendorInstallationCreateSchema = z.object({
