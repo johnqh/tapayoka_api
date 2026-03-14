@@ -248,7 +248,7 @@ export async function initDatabase() {
   // --- Migrations for existing databases ---
   // Rename enums
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TYPE tapayoka.service_type RENAME TO installation_type; EXCEPTION WHEN undefined_object THEN NULL; END $$;
+    DO $$ BEGIN ALTER TYPE tapayoka.service_type RENAME TO installation_type; EXCEPTION WHEN undefined_object OR duplicate_object THEN NULL; END $$;
   `);
 
   // Rename legacy tables
