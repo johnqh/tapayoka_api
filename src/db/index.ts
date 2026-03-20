@@ -310,6 +310,10 @@ export async function initDatabase() {
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_equipments RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
+  // Rename installation columns to offering columns (installation→offering rename)
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_equipments RENAME COLUMN vendor_installation_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+  `);
 
   // Add slot enum + column to vendor_models
   await connection.unsafe(`
