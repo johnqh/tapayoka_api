@@ -4,13 +4,13 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   devices,
-  deviceInstallations,
-  installations,
+  deviceOfferings,
+  offerings,
 } from "../../db/schema.ts";
 import {
   deviceCreateSchema,
   deviceUpdateSchema,
-  deviceInstallationAssignSchema,
+  deviceOfferingAssignSchema,
   ethAddressSchema,
 } from "../../schemas/index.ts";
 import { getServerAddress } from "../../services/crypto.ts";
@@ -194,8 +194,8 @@ vendorDevices.delete("/:walletAddress", async c => {
   return c.json(successResponse({ deleted: true }));
 });
 
-/** GET /:walletAddress/installations - Get installations assigned to device */
-vendorDevices.get("/:walletAddress/installations", async c => {
+/** GET /:walletAddress/offerings - Get offerings assigned to device */
+vendorDevices.get("/:walletAddress/offerings", async c => {
   const walletAddress = c.req.param("walletAddress");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -227,21 +227,21 @@ vendorDevices.get("/:walletAddress/installations", async c => {
   }
 
   const assigned = await db
-    .select({ installation: installations })
-    .from(deviceInstallations)
-    .innerJoin(installations, eq(deviceInstallations.installationId, installations.id))
-    .where(eq(deviceInstallations.deviceWalletAddress, walletAddress));
+    .select({ offering: offerings })
+    .from(deviceOfferings)
+    .innerJoin(offerings, eq(deviceOfferings.offeringId, offerings.id))
+    .where(eq(deviceOfferings.deviceWalletAddress, walletAddress));
 
-  return c.json(successResponse(assigned.map(r => r.installation)));
+  return c.json(successResponse(assigned.map(r => r.offering)));
 });
 
-/** PUT /:walletAddress/installations - Assign installations to device (replace all) */
+/** PUT /:walletAddress/offerings - Assign offerings to device (replace all) */
 vendorDevices.put(
-  "/:walletAddress/installations",
-  zValidator("json", deviceInstallationAssignSchema),
+  "/:walletAddress/offerings",
+  zValidator("json", deviceOfferingAssignSchema),
   async c => {
     const walletAddress = c.req.param("walletAddress");
-    const { installationIds } = c.req.valid("json");
+    const { offeringIds } = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
     const userId = c.get("firebaseUid");
 
@@ -273,20 +273,20 @@ vendorDevices.put(
 
     // Delete existing assignments
     await db
-      .delete(deviceInstallations)
-      .where(eq(deviceInstallations.deviceWalletAddress, walletAddress));
+      .delete(deviceOfferings)
+      .where(eq(deviceOfferings.deviceWalletAddress, walletAddress));
 
     // Insert new assignments
-    if (installationIds.length > 0) {
-      await db.insert(deviceInstallations).values(
-        installationIds.map(installationId => ({
+    if (offeringIds.length > 0) {
+      await db.insert(deviceOfferings).values(
+        offeringIds.map(offeringId => ({
           deviceWalletAddress: walletAddress,
-          installationId,
+          offeringId,
         }))
       );
     }
 
-    return c.json(successResponse({ assigned: installationIds.length }));
+    return c.json(successResponse({ assigned: offeringIds.length }));
   }
 );
 

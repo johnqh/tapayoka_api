@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // We need to reset the module cache between tests since env-helper caches .env.local
 let getEnv: typeof import('../src/lib/env-helper').getEnv;
@@ -10,10 +10,6 @@ describe('env-helper', () => {
     const mod = await import('../src/lib/env-helper');
     getEnv = mod.getEnv;
     getRequiredEnv = mod.getRequiredEnv;
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe('getEnv', () => {

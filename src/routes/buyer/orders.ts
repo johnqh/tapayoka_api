@@ -2,21 +2,21 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { orders, installations, devices } from "../../db/schema.ts";
+import { orders, offerings, devices } from "../../db/schema.ts";
 import {
   createOrderSchema,
   processPaymentSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
-import { successResponse, errorResponse, type InstallationType } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse, type OfferingType } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
 
-/** Calculate authorized seconds based on installation type and amount */
+/** Calculate authorized seconds based on offering type and amount */
 function calculateAuthorizedSeconds(
-  type: InstallationType,
+  type: OfferingType,
   amountCents: number,
   fixedMinutes: number | null,
   minutesPer25c: number | null
@@ -36,7 +36,7 @@ function calculateAuthorizedSeconds(
  * POST / - Create a new order
  */
 buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
-  const { deviceWalletAddress, installationId, amountCents } = c.req.valid("json");
+  const { deviceWalletAddress, offeringId, amountCents } = c.req.valid("json");
   const buyerUid = c.get("firebaseUid") as string;
 
   const db = getDb();
@@ -52,32 +52,32 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     return c.json(errorResponse("Device not found or inactive"), 404);
   }
 
-  // Validate installation exists and is active
-  const [installation] = await db
+  // Validate offering exists and is active
+  const [offering] = await db
     .select()
-    .from(installations)
-    .where(eq(installations.id, installationId))
+    .from(offerings)
+    .where(eq(offerings.id, offeringId))
     .limit(1);
 
-  if (!installation || !installation.active) {
-    return c.json(errorResponse("Installation not found or inactive"), 404);
+  if (!offering || !offering.active) {
+    return c.json(errorResponse("Offering not found or inactive"), 404);
   }
 
-  // Validate amount matches installation price
-  if (amountCents < installation.priceCents) {
+  // Validate amount matches offering price
+  if (amountCents < offering.priceCents) {
     return c.json(
       errorResponse(
-        `Amount ${amountCents} is less than installation price ${installation.priceCents}`
+        `Amount ${amountCents} is less than offering price ${offering.priceCents}`
       ),
       400
     );
   }
 
   const authorizedSeconds = calculateAuthorizedSeconds(
-    installation.type as InstallationType,
+    offering.type as OfferingType,
     amountCents,
-    installation.fixedMinutes,
-    installation.minutesPer25c
+    offering.fixedMinutes,
+    offering.minutesPer25c
   );
 
   // Create order
@@ -85,7 +85,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     .insert(orders)
     .values({
       deviceWalletAddress,
-      installationId,
+      offeringId,
       buyerUid,
       amountCents,
       authorizedSeconds,

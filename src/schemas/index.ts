@@ -19,7 +19,7 @@ export const deviceVerifySchema = z.object({
 
 export const createOrderSchema = z.object({
   deviceWalletAddress: ethAddressSchema,
-  installationId: uuidSchema,
+  offeringId: uuidSchema,
   amountCents: z.number().int().positive(),
 });
 
@@ -69,7 +69,7 @@ export const deviceUpdateSchema = z.object({
     .optional(),
 });
 
-export const installationCreateSchema = z.object({
+export const offeringCreateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
   type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]),
@@ -78,7 +78,7 @@ export const installationCreateSchema = z.object({
   minutesPer25c: z.number().int().positive().optional(),
 });
 
-export const installationUpdateSchema = z.object({
+export const offeringUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().nullable().optional(),
   type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]).optional(),
@@ -88,8 +88,8 @@ export const installationUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export const deviceInstallationAssignSchema = z.object({
-  installationIds: z.array(uuidSchema).min(1),
+export const deviceOfferingAssignSchema = z.object({
+  offeringIds: z.array(uuidSchema).min(1),
 });
 
 // Vendor management schemas
@@ -139,7 +139,7 @@ export const vendorModelUpdateSchema = z.object({
   schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
-const installationSignalSchema = z.object({
+const offeringSignalSchema = z.object({
   pinNumber: z.number().int().min(0).max(25),
   duration: z.number().int().positive(),
 });
@@ -160,7 +160,7 @@ const fixedPricingSchema = z.object({
   type: z.literal("fixed"),
   currencyCode: z.string().length(3),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/),
-  signals: z.array(installationSignalSchema),
+  signals: z.array(offeringSignalSchema),
 });
 
 const slotPricingSchema = z.object({
@@ -173,46 +173,35 @@ const multiSlotPricingSchema = z.object({
   slots: z.array(slotPricingSchema).min(1),
 });
 
-const vendorInstallationPricingSchema = z.discriminatedUnion("type", [
+const vendorOfferingPricingSchema = z.discriminatedUnion("type", [
   variablePricingSchema,
   fixedPricingSchema,
   multiSlotPricingSchema,
 ]);
 
-export const vendorInstallationCreateSchema = z.object({
+export const vendorOfferingCreateSchema = z.object({
   vendorLocationId: uuidSchema,
   vendorModelId: uuidSchema,
   name: z.string().min(1).max(255),
-  pricing: vendorInstallationPricingSchema,
+  pricing: vendorOfferingPricingSchema,
 });
 
-export const vendorInstallationUpdateSchema = z.object({
+export const vendorOfferingUpdateSchema = z.object({
   vendorLocationId: uuidSchema.optional(),
   vendorModelId: uuidSchema.optional(),
   name: z.string().min(1).max(255).optional(),
-  pricing: vendorInstallationPricingSchema.optional(),
-});
-
-export const vendorInstallationControlCreateSchema = z.object({
-  vendorInstallationId: uuidSchema,
-  pinNumber: z.number().int().min(1).max(5),
-  duration: z.number().int().positive(),
-});
-
-export const vendorInstallationControlUpdateSchema = z.object({
-  pinNumber: z.number().int().min(1).max(5).optional(),
-  duration: z.number().int().positive().optional(),
+  pricing: vendorOfferingPricingSchema.optional(),
 });
 
 export const vendorEquipmentCreateSchema = z.object({
   walletAddress: ethAddressSchema,
-  vendorInstallationId: uuidSchema,
+  vendorOfferingId: uuidSchema,
   name: z.string().min(1).max(255),
 });
 
 export const vendorEquipmentUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  vendorInstallationId: uuidSchema.optional(),
+  vendorOfferingId: uuidSchema.optional(),
 });
 
 // Entity schemas

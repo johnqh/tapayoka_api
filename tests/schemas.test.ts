@@ -9,9 +9,9 @@ import {
   telemetryEventSchema,
   deviceCreateSchema,
   deviceUpdateSchema,
-  installationCreateSchema,
-  installationUpdateSchema,
-  deviceInstallationAssignSchema,
+  offeringCreateSchema,
+  offeringUpdateSchema,
+  deviceOfferingAssignSchema,
 } from '../src/schemas/index';
 
 describe('ethAddressSchema', () => {
@@ -67,7 +67,7 @@ describe('createOrderSchema', () => {
   it('accepts valid order', () => {
     const result = createOrderSchema.parse({
       deviceWalletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD08',
-      installationId: '550e8400-e29b-41d4-a716-446655440000',
+      offeringId: '550e8400-e29b-41d4-a716-446655440000',
       amountCents: 100,
     });
     expect(result.amountCents).toBe(100);
@@ -77,7 +77,7 @@ describe('createOrderSchema', () => {
     expect(() =>
       createOrderSchema.parse({
         deviceWalletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD08',
-        installationId: '550e8400-e29b-41d4-a716-446655440000',
+        offeringId: '550e8400-e29b-41d4-a716-446655440000',
         amountCents: 0,
       })
     ).toThrow();
@@ -87,7 +87,7 @@ describe('createOrderSchema', () => {
     expect(() =>
       createOrderSchema.parse({
         deviceWalletAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD08',
-        installationId: '550e8400-e29b-41d4-a716-446655440000',
+        offeringId: '550e8400-e29b-41d4-a716-446655440000',
         amountCents: -50,
       })
     ).toThrow();
@@ -191,9 +191,9 @@ describe('deviceUpdateSchema', () => {
   });
 });
 
-describe('installationCreateSchema', () => {
-  it('accepts TRIGGER installation', () => {
-    const result = installationCreateSchema.parse({
+describe('offeringCreateSchema', () => {
+  it('accepts TRIGGER offering', () => {
+    const result = offeringCreateSchema.parse({
       name: 'Quick Wash',
       type: 'TRIGGER',
       priceCents: 100,
@@ -201,8 +201,8 @@ describe('installationCreateSchema', () => {
     expect(result.type).toBe('TRIGGER');
   });
 
-  it('accepts FIXED installation with fixedMinutes', () => {
-    const result = installationCreateSchema.parse({
+  it('accepts FIXED offering with fixedMinutes', () => {
+    const result = offeringCreateSchema.parse({
       name: 'Standard Wash',
       type: 'FIXED',
       priceCents: 200,
@@ -211,8 +211,8 @@ describe('installationCreateSchema', () => {
     expect(result.fixedMinutes).toBe(30);
   });
 
-  it('accepts VARIABLE installation with minutesPer25c', () => {
-    const result = installationCreateSchema.parse({
+  it('accepts VARIABLE offering with minutesPer25c', () => {
+    const result = offeringCreateSchema.parse({
       name: 'Air Compressor',
       type: 'VARIABLE',
       priceCents: 25,
@@ -221,9 +221,9 @@ describe('installationCreateSchema', () => {
     expect(result.minutesPer25c).toBe(5);
   });
 
-  it('rejects invalid installation type', () => {
+  it('rejects invalid offering type', () => {
     expect(() =>
-      installationCreateSchema.parse({
+      offeringCreateSchema.parse({
         name: 'Bad',
         type: 'INVALID',
         priceCents: 100,
@@ -232,31 +232,31 @@ describe('installationCreateSchema', () => {
   });
 });
 
-describe('installationUpdateSchema', () => {
+describe('offeringUpdateSchema', () => {
   it('accepts partial update', () => {
-    const result = installationUpdateSchema.parse({ active: false });
+    const result = offeringUpdateSchema.parse({ active: false });
     expect(result.active).toBe(false);
   });
 
   it('accepts nullable fields', () => {
-    const result = installationUpdateSchema.parse({ fixedMinutes: null });
+    const result = offeringUpdateSchema.parse({ fixedMinutes: null });
     expect(result.fixedMinutes).toBeNull();
   });
 });
 
-describe('deviceInstallationAssignSchema', () => {
-  it('accepts valid installation IDs', () => {
-    const result = deviceInstallationAssignSchema.parse({
-      installationIds: ['550e8400-e29b-41d4-a716-446655440000'],
+describe('deviceOfferingAssignSchema', () => {
+  it('accepts valid offering IDs', () => {
+    const result = deviceOfferingAssignSchema.parse({
+      offeringIds: ['550e8400-e29b-41d4-a716-446655440000'],
     });
-    expect(result.installationIds).toHaveLength(1);
+    expect(result.offeringIds).toHaveLength(1);
   });
 
   it('rejects empty array', () => {
-    expect(() => deviceInstallationAssignSchema.parse({ installationIds: [] })).toThrow();
+    expect(() => deviceOfferingAssignSchema.parse({ offeringIds: [] })).toThrow();
   });
 
   it('rejects invalid UUIDs', () => {
-    expect(() => deviceInstallationAssignSchema.parse({ installationIds: ['not-uuid'] })).toThrow();
+    expect(() => deviceOfferingAssignSchema.parse({ offeringIds: ['not-uuid'] })).toThrow();
   });
 });

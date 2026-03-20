@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { orders, devices, installations } from "../../db/schema.ts";
+import { orders, devices, offerings } from "../../db/schema.ts";
 import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -31,12 +31,12 @@ vendorOrders.get("/", async c => {
     .select({
       order: orders,
       deviceLabel: devices.label,
-      installationName: installations.name,
-      installationType: installations.type,
+      offeringName: offerings.name,
+      offeringType: offerings.type,
     })
     .from(orders)
     .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
-    .innerJoin(installations, eq(orders.installationId, installations.id))
+    .innerJoin(offerings, eq(orders.offeringId, offerings.id))
     .where(eq(devices.entityId, result.entity.id))
     .orderBy(desc(orders.createdAt))
     .limit(limit);
@@ -46,8 +46,8 @@ vendorOrders.get("/", async c => {
   const detailed = results.map(r => ({
     ...r.order,
     deviceLabel: r.deviceLabel,
-    installationName: r.installationName,
-    installationType: r.installationType,
+    offeringName: r.offeringName,
+    offeringType: r.offeringType,
   }));
 
   return c.json(successResponse(detailed));

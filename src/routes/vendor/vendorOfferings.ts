@@ -3,14 +3,14 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorInstallations,
+  vendorOfferings,
   vendorLocations,
   vendorModels,
   vendorEquipments,
 } from "../../db/schema.ts";
 import {
-  vendorInstallationCreateSchema,
-  vendorInstallationUpdateSchema,
+  vendorOfferingCreateSchema,
+  vendorOfferingUpdateSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
 import {
@@ -23,14 +23,14 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const vendorInstallationsRoute = new Hono<AppEnv>();
+const vendorOfferingsRoute = new Hono<AppEnv>();
 
-/** GET /:id - Get a single vendor installation */
-vendorInstallationsRoute.get("/:id", async c => {
+/** GET /:id - Get a single vendor offering */
+vendorOfferingsRoute.get("/:id", async c => {
   const id = c.req.param("id");
   const parsed = uuidSchema.safeParse(id);
   if (!parsed.success) {
-    return c.json(errorResponse("Invalid installation ID"), 400);
+    return c.json(errorResponse("Invalid offering ID"), 400);
   }
 
   const entitySlug = c.req.param("entitySlug");
@@ -46,33 +46,33 @@ vendorInstallationsRoute.get("/:id", async c => {
 
   const db = getDb();
 
-  // Verify installation belongs to entity via location
+  // Verify offering belongs to entity via location
   const [instResult] = await db
-    .select({ installation: vendorInstallations })
-    .from(vendorInstallations)
+    .select({ offering: vendorOfferings })
+    .from(vendorOfferings)
     .innerJoin(
       vendorLocations,
-      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorInstallations.id, id),
+        eq(vendorOfferings.id, id),
         eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);
 
   if (!instResult) {
-    return c.json(errorResponse("Installation not found"), 404);
+    return c.json(errorResponse("Offering not found"), 404);
   }
 
-  return c.json(successResponse(instResult.installation));
+  return c.json(successResponse(instResult.offering));
 });
 
-/** POST / - Create a new vendor installation */
-vendorInstallationsRoute.post(
+/** POST / - Create a new vendor offering */
+vendorOfferingsRoute.post(
   "/",
-  zValidator("json", vendorInstallationCreateSchema),
+  zValidator("json", vendorOfferingCreateSchema),
   async c => {
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
@@ -123,12 +123,12 @@ vendorInstallationsRoute.post(
     // Check unique constraint before insert
     const [existing] = await db
       .select()
-      .from(vendorInstallations)
+      .from(vendorOfferings)
       .where(
         and(
-          eq(vendorInstallations.vendorLocationId, data.vendorLocationId),
+          eq(vendorOfferings.vendorLocationId, data.vendorLocationId),
           eq(
-            vendorInstallations.vendorModelId,
+            vendorOfferings.vendorModelId,
             data.vendorModelId
           )
         )
@@ -138,25 +138,25 @@ vendorInstallationsRoute.post(
     if (existing) {
       return c.json(
         errorResponse(
-          "An installation already exists for this location and model combination"
+          "An offering already exists for this location and model combination"
         ),
         409
       );
     }
 
-    const [installation] = await db
-      .insert(vendorInstallations)
+    const [offering] = await db
+      .insert(vendorOfferings)
       .values(data)
       .returning();
 
-    return c.json(successResponse(installation), 201);
+    return c.json(successResponse(offering), 201);
   }
 );
 
-/** PUT /:id - Update a vendor installation */
-vendorInstallationsRoute.put(
+/** PUT /:id - Update a vendor offering */
+vendorOfferingsRoute.put(
   "/:id",
-  zValidator("json", vendorInstallationUpdateSchema),
+  zValidator("json", vendorOfferingUpdateSchema),
   async c => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
@@ -175,36 +175,36 @@ vendorInstallationsRoute.put(
 
     // Verify ownership via location join
     const [existing] = await db
-      .select({ installation: vendorInstallations })
-      .from(vendorInstallations)
+      .select({ offering: vendorOfferings })
+      .from(vendorOfferings)
       .innerJoin(
         vendorLocations,
-        eq(vendorInstallations.vendorLocationId, vendorLocations.id)
+        eq(vendorOfferings.vendorLocationId, vendorLocations.id)
       )
       .where(
         and(
-          eq(vendorInstallations.id, id),
+          eq(vendorOfferings.id, id),
           eq(vendorLocations.entityId, result.entity.id)
         )
       )
       .limit(1);
 
     if (!existing) {
-      return c.json(errorResponse("Installation not found"), 404);
+      return c.json(errorResponse("Offering not found"), 404);
     }
 
     const [updated] = await db
-      .update(vendorInstallations)
+      .update(vendorOfferings)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorInstallations.id, id))
+      .where(eq(vendorOfferings.id, id))
       .returning();
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:id - Delete a vendor installation (409 if has equipments; controls cascade) */
-vendorInstallationsRoute.delete("/:id", async c => {
+/** DELETE /:id - Delete a vendor offering (409 if has equipments; controls cascade) */
+vendorOfferingsRoute.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -221,43 +221,43 @@ vendorInstallationsRoute.delete("/:id", async c => {
 
   // Verify ownership via location join
   const [existing] = await db
-    .select({ installation: vendorInstallations })
-    .from(vendorInstallations)
+    .select({ offering: vendorOfferings })
+    .from(vendorOfferings)
     .innerJoin(
       vendorLocations,
-      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorInstallations.id, id),
+        eq(vendorOfferings.id, id),
         eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);
 
   if (!existing) {
-    return c.json(errorResponse("Installation not found"), 404);
+    return c.json(errorResponse("Offering not found"), 404);
   }
 
   // Check for associated equipments
   const [hasEquipments] = await db
     .select()
     .from(vendorEquipments)
-    .where(eq(vendorEquipments.vendorInstallationId, id))
+    .where(eq(vendorEquipments.vendorOfferingId, id))
     .limit(1);
 
   if (hasEquipments) {
     return c.json(
       errorResponse(
-        "Cannot delete installation with associated equipment. Remove equipment first."
+        "Cannot delete offering with associated equipment. Remove equipment first."
       ),
       409
     );
   }
 
   // Controls cascade-delete via FK
-  await db.delete(vendorInstallations).where(eq(vendorInstallations.id, id));
+  await db.delete(vendorOfferings).where(eq(vendorOfferings.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 
-export default vendorInstallationsRoute;
+export default vendorOfferingsRoute;

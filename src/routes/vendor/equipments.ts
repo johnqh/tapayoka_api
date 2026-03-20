@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorEquipments,
-  vendorInstallations,
+  vendorOfferings,
   vendorLocations,
 } from "../../db/schema.ts";
 import {
@@ -25,22 +25,22 @@ import {
 
 const equipments = new Hono<AppEnv>();
 
-/** Helper: verify installation belongs to entity via location */
-async function verifyInstallationOwnership(
+/** Helper: verify offering belongs to entity via location */
+async function verifyOfferingOwnership(
   db: ReturnType<typeof getDb>,
-  installationId: string,
+  offeringId: string,
   entityId: string
 ) {
   const [result] = await db
-    .select({ installation: vendorInstallations })
-    .from(vendorInstallations)
+    .select({ offering: vendorOfferings })
+    .from(vendorOfferings)
     .innerJoin(
       vendorLocations,
-      eq(vendorInstallations.vendorLocationId, vendorLocations.id)
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
     )
     .where(
       and(
-        eq(vendorInstallations.id, installationId),
+        eq(vendorOfferings.id, offeringId),
         eq(vendorLocations.entityId, entityId)
       )
     )
@@ -48,7 +48,7 @@ async function verifyInstallationOwnership(
   return !!result;
 }
 
-/** GET /service/:serviceId - Get all equipments for an installation */
+/** GET /service/:serviceId - Get all equipments for an offering */
 equipments.get("/service/:serviceId", async c => {
   const serviceId = c.req.param("serviceId");
   const parsed = uuidSchema.safeParse(serviceId);
@@ -68,15 +68,15 @@ equipments.get("/service/:serviceId", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyInstallationOwnership(db, serviceId, result.entity.id);
+  const owned = await verifyOfferingOwnership(db, serviceId, result.entity.id);
   if (!owned) {
-    return c.json(errorResponse("Installation not found"), 404);
+    return c.json(errorResponse("Offering not found"), 404);
   }
 
   const results = await db
     .select()
     .from(vendorEquipments)
-    .where(eq(vendorEquipments.vendorInstallationId, serviceId));
+    .where(eq(vendorEquipments.vendorOfferingId, serviceId));
 
   return c.json(successResponse(results));
 });
@@ -99,13 +99,13 @@ equipments.post(
     }
 
     const db = getDb();
-    const owned = await verifyInstallationOwnership(
+    const owned = await verifyOfferingOwnership(
       db,
-      data.vendorInstallationId,
+      data.vendorOfferingId,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Installation not found"), 404);
+      return c.json(errorResponse("Offering not found"), 404);
     }
 
     // Check for duplicate wallet address
@@ -156,7 +156,7 @@ equipments.put(
 
     const db = getDb();
 
-    // Get equipment and verify ownership through installation -> location
+    // Get equipment and verify ownership through offering -> location
     const [equipment] = await db
       .select()
       .from(vendorEquipments)
@@ -167,24 +167,24 @@ equipments.put(
       return c.json(errorResponse("Equipment not found"), 404);
     }
 
-    const owned = await verifyInstallationOwnership(
+    const owned = await verifyOfferingOwnership(
       db,
-      equipment.vendorInstallationId,
+      equipment.vendorOfferingId,
       result.entity.id
     );
     if (!owned) {
       return c.json(errorResponse("Equipment not found"), 404);
     }
 
-    // If changing vendorInstallationId, verify ownership of target installation too
-    if (data.vendorInstallationId) {
-      const targetOwned = await verifyInstallationOwnership(
+    // If changing vendorOfferingId, verify ownership of target offering too
+    if (data.vendorOfferingId) {
+      const targetOwned = await verifyOfferingOwnership(
         db,
-        data.vendorInstallationId,
+        data.vendorOfferingId,
         result.entity.id
       );
       if (!targetOwned) {
-        return c.json(errorResponse("Target installation not found"), 404);
+        return c.json(errorResponse("Target offering not found"), 404);
       }
     }
 
@@ -223,9 +223,9 @@ equipments.delete("/:walletAddress", async c => {
     return c.json(errorResponse("Equipment not found"), 404);
   }
 
-  const owned = await verifyInstallationOwnership(
+  const owned = await verifyOfferingOwnership(
     db,
-    equipment.vendorInstallationId,
+    equipment.vendorOfferingId,
     result.entity.id
   );
   if (!owned) {

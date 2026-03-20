@@ -2,14 +2,14 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { authorizations, orders, installations } from "../../db/schema.ts";
+import { authorizations, orders, offerings } from "../../db/schema.ts";
 import { createAuthorizationSchema, uuidSchema } from "../../schemas/index.ts";
 import { signPayload } from "../../services/crypto.ts";
 import {
   successResponse,
   errorResponse,
   type AuthorizationPayload,
-  type InstallationType,
+  type OfferingType,
 } from "@sudobility/tapayoka_types";
 import { randomUUID } from "crypto";
 
@@ -56,18 +56,18 @@ buyerAuthorizations.post(
       return c.json(errorResponse("Authorization already exists"), 409);
     }
 
-    // Get installation type
-    const [installation] = await db
+    // Get offering type
+    const [offering] = await db
       .select()
-      .from(installations)
-      .where(eq(installations.id, order.installationId))
+      .from(offerings)
+      .where(eq(offerings.id, order.offeringId))
       .limit(1);
 
     // Build authorization payload
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     const payload: AuthorizationPayload = {
       orderId: order.id,
-      installationType: (installation?.type ?? "TRIGGER") as InstallationType,
+      offeringType: (offering?.type ?? "TRIGGER") as OfferingType,
       seconds: order.authorizedSeconds,
       nonce: randomUUID(),
       exp: Math.floor(expiresAt.getTime() / 1000),

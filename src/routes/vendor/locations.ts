@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorLocations,
-  vendorInstallations,
+  vendorOfferings,
   vendorModels,
 } from "../../db/schema.ts";
 import {
@@ -144,7 +144,7 @@ locations.put(
   }
 );
 
-/** DELETE /:id - Delete a location (409 if has installations) */
+/** DELETE /:id - Delete a location (409 if has offerings) */
 locations.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
@@ -169,17 +169,17 @@ locations.delete("/:id", async c => {
     return c.json(errorResponse("Location not found"), 404);
   }
 
-  // Check for associated installations
-  const [hasInstallations] = await db
+  // Check for associated offerings
+  const [hasOfferings] = await db
     .select()
-    .from(vendorInstallations)
-    .where(eq(vendorInstallations.vendorLocationId, id))
+    .from(vendorOfferings)
+    .where(eq(vendorOfferings.vendorLocationId, id))
     .limit(1);
 
-  if (hasInstallations) {
+  if (hasOfferings) {
     return c.json(
       errorResponse(
-        "Cannot delete location with associated installations. Remove installations first."
+        "Cannot delete location with associated offerings. Remove offerings first."
       ),
       409
     );
@@ -189,8 +189,8 @@ locations.delete("/:id", async c => {
   return c.json(successResponse({ deleted: true }));
 });
 
-/** GET /:id/installations - Get installations for a location */
-locations.get("/:id/installations", async c => {
+/** GET /:id/offerings - Get offerings for a location */
+locations.get("/:id/offerings", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -216,19 +216,19 @@ locations.get("/:id/installations", async c => {
 
   const results = await db
     .select({
-      installation: vendorInstallations,
+      offering: vendorOfferings,
       modelName: vendorModels.name,
     })
-    .from(vendorInstallations)
+    .from(vendorOfferings)
     .innerJoin(
       vendorModels,
-      eq(vendorInstallations.vendorModelId, vendorModels.id)
+      eq(vendorOfferings.vendorModelId, vendorModels.id)
     )
-    .where(eq(vendorInstallations.vendorLocationId, id));
+    .where(eq(vendorOfferings.vendorLocationId, id));
 
   return c.json(
     successResponse(
-      results.map(r => ({ ...r.installation, modelName: r.modelName }))
+      results.map(r => ({ ...r.offering, modelName: r.modelName }))
     )
   );
 });
