@@ -1,8 +1,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { orders, offerings, devices } from "../../db/schema.ts";
+import {
+  orders,
+  offerings,
+  devices,
+  vendorInstallationSlots,
+} from "../../db/schema.ts";
 import {
   createOrderSchema,
   processPaymentSchema,
@@ -53,7 +58,8 @@ buyerOrders.get("/", async c => {
  * POST / - Create a new order
  */
 buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
-  const { deviceWalletAddress, offeringId, amountCents } = c.req.valid("json");
+  const { deviceWalletAddress, offeringId, amountCents, slotId } =
+    c.req.valid("json");
   const buyerUid = c.get("firebaseUid") as string;
 
   const db = getDb();
@@ -90,6 +96,48 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     );
   }
 
+  // Validate slot if provided
+  if (slotId) {
+    const [slot] = await db
+      .select()
+      .from(vendorInstallationSlots)
+      .where(
+        and(
+          eq(vendorInstallationSlots.id, slotId),
+          eq(
+            vendorInstallationSlots.installationWalletAddress,
+            deviceWalletAddress
+          )
+        )
+      )
+      .limit(1);
+
+    if (!slot) {
+      return c.json(errorResponse("Slot not found"), 404);
+    }
+
+    // Check slot availability (no active orders for this slot)
+    const [activeOrder] = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.slotId, slotId),
+          inArray(orders.status, [
+            "CREATED",
+            "PAID",
+            "AUTHORIZED",
+            "RUNNING",
+          ] as const)
+        )
+      )
+      .limit(1);
+
+    if (activeOrder) {
+      return c.json(errorResponse("Slot is currently in use"), 409);
+    }
+  }
+
   const authorizedSeconds = calculateAuthorizedSeconds(
     offering.type as OfferingType,
     amountCents,
@@ -106,6 +154,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
       buyerUid,
       amountCents,
       authorizedSeconds,
+      ...(slotId ? { slotId } : {}),
     })
     .returning();
 

@@ -2,10 +2,21 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { devices, deviceOfferings, offerings } from "../../db/schema.ts";
+import {
+  devices,
+  deviceOfferings,
+  offerings,
+  vendorInstallations,
+  vendorOfferings,
+  vendorModels,
+} from "../../db/schema.ts";
 import { verifySignature } from "../../services/crypto.ts";
 import { deviceVerifySchema } from "../../schemas/index.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import {
+  successResponse,
+  errorResponse,
+  type VendorModelSlot,
+} from "@sudobility/tapayoka_types";
 
 const buyerDevices = new Hono();
 
@@ -59,10 +70,39 @@ buyerDevices.post(
         )
       );
 
+    // Look up slot type from vendor management tables
+    let slotType: VendorModelSlot | null = null;
+    const installationResult = await db
+      .select({ slot: vendorModels.slot })
+      .from(vendorInstallations)
+      .innerJoin(
+        vendorOfferings,
+        eq(
+          vendorInstallations.vendorOfferingId,
+          vendorOfferings.id
+        )
+      )
+      .innerJoin(
+        vendorModels,
+        eq(vendorOfferings.vendorModelId, vendorModels.id)
+      )
+      .where(
+        eq(
+          vendorInstallations.walletAddress,
+          deviceWalletAddress
+        )
+      )
+      .limit(1);
+
+    if (installationResult.length > 0 && installationResult[0].slot) {
+      slotType = installationResult[0].slot as VendorModelSlot;
+    }
+
     return c.json(
       successResponse({
         device,
         offerings: assignedOfferings.map(r => r.offering),
+        slotType,
       })
     );
   }

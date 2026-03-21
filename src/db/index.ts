@@ -446,6 +446,9 @@ export async function initDatabase() {
   `;
   await connection`CREATE INDEX IF NOT EXISTS vendor_installation_slots_installation_idx ON tapayoka.vendor_installation_slots(installation_wallet_address)`;
 
+  // Add slot_id column to orders (references vendor_installation_slots)
+  await connection`ALTER TABLE tapayoka.orders ADD COLUMN IF NOT EXISTS slot_id UUID REFERENCES tapayoka.vendor_installation_slots(id) ON DELETE SET NULL`;
+
   // Add pricing_tier_id and pricing_tier columns to vendor_installations
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;

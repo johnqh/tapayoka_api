@@ -192,6 +192,9 @@ export const orders = tapayoka.table(
     stripePaymentIntentId: varchar("stripe_payment_intent_id", {
       length: 255,
     }),
+    slotId: uuid("slot_id").references(() => vendorInstallationSlots.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

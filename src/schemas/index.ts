@@ -21,6 +21,7 @@ export const createOrderSchema = z.object({
   deviceWalletAddress: ethAddressSchema,
   offeringId: uuidSchema,
   amountCents: z.number().int().positive(),
+  slotId: z.string().uuid().optional(),
 });
 
 export const processPaymentSchema = z.object({
