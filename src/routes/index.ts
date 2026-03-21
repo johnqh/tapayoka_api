@@ -23,7 +23,7 @@ import vendorQr from "./vendor/qr.ts";
 import vendorLocations from "./vendor/locations.ts";
 import vendorModels from "./vendor/models.ts";
 import vendorOfferings from "./vendor/vendorOfferings.ts";
-import vendorEquipments from "./vendor/equipments.ts";
+import vendorInstallations from "./vendor/installations.ts";
 
 const routes = new Hono();
 
@@ -58,7 +58,7 @@ vendorEntityRoutes.use("*", roleGuard("vendor"));
 vendorEntityRoutes.route("/locations", vendorLocations);
 vendorEntityRoutes.route("/models", vendorModels);
 vendorEntityRoutes.route("/offerings", vendorOfferings);
-vendorEntityRoutes.route("/equipments", vendorEquipments);
+vendorEntityRoutes.route("/installations", vendorInstallations);
 vendorEntityRoutes.route("/devices", vendorDevices);
 vendorEntityRoutes.route("/services", vendorOfferingsLegacy);
 vendorEntityRoutes.route("/orders", vendorOrders);

@@ -309,8 +309,8 @@ export const vendorOfferings = tapayoka.table(
   ]
 );
 
-export const vendorEquipments = tapayoka.table(
-  "vendor_equipments",
+export const vendorInstallations = tapayoka.table(
+  "vendor_installations",
   {
     walletAddress: varchar("wallet_address", { length: 42 })
       .primaryKey()
@@ -318,11 +318,11 @@ export const vendorEquipments = tapayoka.table(
     vendorOfferingId: uuid("vendor_offering_id")
       .notNull()
       .references(() => vendorOfferings.id),
-    name: varchar("name", { length: 255 }).notNull(),
+    label: varchar("label", { length: 255 }).notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_equipments_offering_idx").on(table.vendorOfferingId),
+    index("vendor_installations_offering_idx").on(table.vendorOfferingId),
   ]
 );

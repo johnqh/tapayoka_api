@@ -193,14 +193,14 @@ export const vendorOfferingUpdateSchema = z.object({
   pricing: vendorOfferingPricingSchema.optional(),
 });
 
-export const vendorEquipmentCreateSchema = z.object({
+export const vendorInstallationCreateSchema = z.object({
   walletAddress: ethAddressSchema,
   vendorOfferingId: uuidSchema,
-  name: z.string().min(1).max(255),
+  label: z.string().min(1).max(255),
 });
 
-export const vendorEquipmentUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
+export const vendorInstallationUpdateSchema = z.object({
+  label: z.string().min(1).max(255).optional(),
   vendorOfferingId: uuidSchema.optional(),
 });
 

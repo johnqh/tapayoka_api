@@ -6,7 +6,7 @@ import {
   vendorOfferings,
   vendorLocations,
   vendorModels,
-  vendorEquipments,
+  vendorInstallations,
 } from "../../db/schema.ts";
 import {
   vendorOfferingCreateSchema,
@@ -203,7 +203,7 @@ vendorOfferingsRoute.put(
   }
 );
 
-/** DELETE /:id - Delete a vendor offering (409 if has equipments; controls cascade) */
+/** DELETE /:id - Delete a vendor offering (409 if has installations; controls cascade) */
 vendorOfferingsRoute.delete("/:id", async c => {
   const id = c.req.param("id");
   const entitySlug = c.req.param("entitySlug");
@@ -239,17 +239,17 @@ vendorOfferingsRoute.delete("/:id", async c => {
     return c.json(errorResponse("Offering not found"), 404);
   }
 
-  // Check for associated equipments
-  const [hasEquipments] = await db
+  // Check for associated installations
+  const [hasInstallations] = await db
     .select()
-    .from(vendorEquipments)
-    .where(eq(vendorEquipments.vendorOfferingId, id))
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.vendorOfferingId, id))
     .limit(1);
 
-  if (hasEquipments) {
+  if (hasInstallations) {
     return c.json(
       errorResponse(
-        "Cannot delete offering with associated equipment. Remove equipment first."
+        "Cannot delete offering with associated installations. Remove installations first."
       ),
       409
     );

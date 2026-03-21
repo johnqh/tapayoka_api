@@ -226,10 +226,10 @@ export async function initDatabase() {
   `;
 
   await connection`
-    CREATE TABLE IF NOT EXISTS tapayoka.vendor_equipments (
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_installations (
       wallet_address VARCHAR(42) PRIMARY KEY NOT NULL,
       vendor_offering_id UUID NOT NULL REFERENCES tapayoka.vendor_offerings(id),
-      name VARCHAR(255) NOT NULL,
+      label VARCHAR(255) NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -266,6 +266,20 @@ export async function initDatabase() {
   `);
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_service_controls RENAME TO vendor_offering_controls; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
+  `);
+
+  // Rename vendor_equipments → vendor_installations
+  // Drop stale vendor_installations if it has the wrong schema (leftover from previous renames)
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'tapayoka' AND table_name = 'vendor_installations' AND column_name = 'id')
+         AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'tapayoka' AND table_name = 'vendor_equipments') THEN
+        DROP TABLE tapayoka.vendor_installations CASCADE;
+      END IF;
+    END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.vendor_equipments RENAME TO vendor_installations; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
   `);
 
   // Add type column to vendor_models (nullable)
@@ -308,11 +322,20 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_offering_controls RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_equipments RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
   // Rename installation columns to offering columns (installation→offering rename)
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_equipments RENAME COLUMN vendor_installation_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_installation_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+  `);
+  // Rename equipment columns to offering columns (equipment→installation rename)
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_equipment_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+  `);
+
+  // Rename vendor_installations.name → label
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN name TO label; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
 
   // Add slot enum + column to vendor_models
@@ -355,7 +378,7 @@ export async function initDatabase() {
   await connection`CREATE INDEX IF NOT EXISTS vendor_models_entity_idx ON tapayoka.vendor_models(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_offerings_location_idx ON tapayoka.vendor_offerings(vendor_location_id)`;
   await connection`CREATE INDEX IF NOT EXISTS vendor_offerings_model_idx ON tapayoka.vendor_offerings(vendor_model_id)`;
-  await connection`CREATE INDEX IF NOT EXISTS vendor_equipments_offering_idx ON tapayoka.vendor_equipments(vendor_offering_id)`;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_installations_offering_idx ON tapayoka.vendor_installations(vendor_offering_id)`;
 
   console.log("Database initialized successfully");
 }

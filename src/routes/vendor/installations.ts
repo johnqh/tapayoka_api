@@ -3,13 +3,13 @@ import { zValidator } from "@hono/zod-validator";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
-  vendorEquipments,
+  vendorInstallations,
   vendorOfferings,
   vendorLocations,
 } from "../../db/schema.ts";
 import {
-  vendorEquipmentCreateSchema,
-  vendorEquipmentUpdateSchema,
+  vendorInstallationCreateSchema,
+  vendorInstallationUpdateSchema,
   ethAddressSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
@@ -23,7 +23,7 @@ import {
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
 
-const equipments = new Hono<AppEnv>();
+const installations = new Hono<AppEnv>();
 
 /** Helper: verify offering belongs to entity via location */
 async function verifyOfferingOwnership(
@@ -48,8 +48,8 @@ async function verifyOfferingOwnership(
   return !!result;
 }
 
-/** GET /service/:serviceId - Get all equipments for an offering */
-equipments.get("/service/:serviceId", async c => {
+/** GET /service/:serviceId - Get all installations for an offering */
+installations.get("/service/:serviceId", async c => {
   const serviceId = c.req.param("serviceId");
   const parsed = uuidSchema.safeParse(serviceId);
   if (!parsed.success) {
@@ -75,16 +75,16 @@ equipments.get("/service/:serviceId", async c => {
 
   const results = await db
     .select()
-    .from(vendorEquipments)
-    .where(eq(vendorEquipments.vendorOfferingId, serviceId));
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.vendorOfferingId, serviceId));
 
   return c.json(successResponse(results));
 });
 
-/** POST / - Create a new equipment */
-equipments.post(
+/** POST / - Create a new installation */
+installations.post(
   "/",
-  zValidator("json", vendorEquipmentCreateSchema),
+  zValidator("json", vendorInstallationCreateSchema),
   async c => {
     const data = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
@@ -111,30 +111,30 @@ equipments.post(
     // Check for duplicate wallet address
     const [existing] = await db
       .select()
-      .from(vendorEquipments)
-      .where(eq(vendorEquipments.walletAddress, data.walletAddress))
+      .from(vendorInstallations)
+      .where(eq(vendorInstallations.walletAddress, data.walletAddress))
       .limit(1);
 
     if (existing) {
       return c.json(
-        errorResponse("Equipment with this wallet address already exists"),
+        errorResponse("Installation with this wallet address already exists"),
         409
       );
     }
 
-    const [equipment] = await db
-      .insert(vendorEquipments)
+    const [installation] = await db
+      .insert(vendorInstallations)
       .values(data)
       .returning();
 
-    return c.json(successResponse(equipment), 201);
+    return c.json(successResponse(installation), 201);
   }
 );
 
-/** PUT /:walletAddress - Update an equipment */
-equipments.put(
+/** PUT /:walletAddress - Update an installation */
+installations.put(
   "/:walletAddress",
-  zValidator("json", vendorEquipmentUpdateSchema),
+  zValidator("json", vendorInstallationUpdateSchema),
   async c => {
     const walletAddress = c.req.param("walletAddress");
     const parsedAddr = ethAddressSchema.safeParse(walletAddress);
@@ -156,24 +156,24 @@ equipments.put(
 
     const db = getDb();
 
-    // Get equipment and verify ownership through offering -> location
-    const [equipment] = await db
+    // Get installation and verify ownership through offering -> location
+    const [installation] = await db
       .select()
-      .from(vendorEquipments)
-      .where(eq(vendorEquipments.walletAddress, walletAddress))
+      .from(vendorInstallations)
+      .where(eq(vendorInstallations.walletAddress, walletAddress))
       .limit(1);
 
-    if (!equipment) {
-      return c.json(errorResponse("Equipment not found"), 404);
+    if (!installation) {
+      return c.json(errorResponse("Installation not found"), 404);
     }
 
     const owned = await verifyOfferingOwnership(
       db,
-      equipment.vendorOfferingId,
+      installation.vendorOfferingId,
       result.entity.id
     );
     if (!owned) {
-      return c.json(errorResponse("Equipment not found"), 404);
+      return c.json(errorResponse("Installation not found"), 404);
     }
 
     // If changing vendorOfferingId, verify ownership of target offering too
@@ -189,17 +189,17 @@ equipments.put(
     }
 
     const [updated] = await db
-      .update(vendorEquipments)
+      .update(vendorInstallations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorEquipments.walletAddress, walletAddress))
+      .where(eq(vendorInstallations.walletAddress, walletAddress))
       .returning();
 
     return c.json(successResponse(updated));
   }
 );
 
-/** DELETE /:walletAddress - Delete an equipment */
-equipments.delete("/:walletAddress", async c => {
+/** DELETE /:walletAddress - Delete an installation */
+installations.delete("/:walletAddress", async c => {
   const walletAddress = c.req.param("walletAddress");
   const entitySlug = c.req.param("entitySlug");
   const userId = c.get("firebaseUid");
@@ -213,29 +213,29 @@ equipments.delete("/:walletAddress", async c => {
   }
 
   const db = getDb();
-  const [equipment] = await db
+  const [installation] = await db
     .select()
-    .from(vendorEquipments)
-    .where(eq(vendorEquipments.walletAddress, walletAddress))
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.walletAddress, walletAddress))
     .limit(1);
 
-  if (!equipment) {
-    return c.json(errorResponse("Equipment not found"), 404);
+  if (!installation) {
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
   const owned = await verifyOfferingOwnership(
     db,
-    equipment.vendorOfferingId,
+    installation.vendorOfferingId,
     result.entity.id
   );
   if (!owned) {
-    return c.json(errorResponse("Equipment not found"), 404);
+    return c.json(errorResponse("Installation not found"), 404);
   }
 
   await db
-    .delete(vendorEquipments)
-    .where(eq(vendorEquipments.walletAddress, walletAddress));
+    .delete(vendorInstallations)
+    .where(eq(vendorInstallations.walletAddress, walletAddress));
   return c.json(successResponse({ deleted: true }));
 });
 
-export default equipments;
+export default installations;
