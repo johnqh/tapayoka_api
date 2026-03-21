@@ -391,6 +391,47 @@ export async function initDatabase() {
     END $$;
   `);
 
+  // Add 'Unique' to slot_pricing enum and migrate old values
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'Unique' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_slot_pricing' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_slot_pricing ADD VALUE 'Unique';
+      END IF;
+    END $$;
+  `);
+  await connection.unsafe(`
+    UPDATE tapayoka.vendor_models SET slot_pricing = 'Unique' WHERE slot_pricing IN ('Same', 'Different');
+  `);
+
+  // Migrate vendor_offerings.pricing → pricing_tiers (JSONB array of PricingTier)
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'tapayoka' AND table_name = 'vendor_offerings' AND column_name = 'pricing' AND data_type = 'jsonb') THEN
+        ALTER TABLE tapayoka.vendor_offerings ADD COLUMN IF NOT EXISTS pricing_tiers JSONB;
+        UPDATE tapayoka.vendor_offerings SET pricing_tiers = CASE
+          WHEN pricing->>'type' = 'multi' THEN (
+            SELECT jsonb_agg(
+              jsonb_set(
+                jsonb_set(s->'pricing', '{id}', to_jsonb(gen_random_uuid()::text)),
+                '{name}', s->'name'
+              )
+            )
+            FROM jsonb_array_elements(pricing->'slots') AS s
+          )
+          ELSE jsonb_build_array(
+            pricing || jsonb_build_object('id', gen_random_uuid()::text, 'name', 'Default')
+          )
+        END WHERE pricing_tiers IS NULL;
+        ALTER TABLE tapayoka.vendor_offerings ALTER COLUMN pricing_tiers SET NOT NULL;
+        ALTER TABLE tapayoka.vendor_offerings DROP COLUMN pricing;
+      END IF;
+    END $$;
+  `);
+
+  // Add pricing_tier_id and pricing_tier columns to vendor_installations
+  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
+  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;
+
   // Migrate vendor_offerings: add pricing JSONB, migrate existing data, drop old columns
   await connection.unsafe(`
     DO $$ BEGIN

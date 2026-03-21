@@ -90,6 +90,7 @@ export const vendorModelSlotPricingEnum = tapayoka.enum("vendor_model_slot_prici
   "Same",
   "Different",
   "Tiered",
+  "Unique",
 ]);
 
 // =============================================================================
@@ -303,7 +304,7 @@ export const vendorOfferings = tapayoka.table(
       .notNull()
       .references(() => vendorModels.id),
     name: varchar("name", { length: 255 }).notNull(),
-    pricing: jsonb("pricing").notNull(),
+    pricingTiers: jsonb("pricing_tiers").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -327,6 +328,8 @@ export const vendorInstallations = tapayoka.table(
       .notNull()
       .references(() => vendorOfferings.id),
     label: varchar("label", { length: 255 }).notNull(),
+    pricingTierId: varchar("pricing_tier_id", { length: 255 }),
+    pricingTier: jsonb("pricing_tier"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

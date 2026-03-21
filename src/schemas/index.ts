@@ -122,7 +122,7 @@ export const vendorModelCreateSchema = z.object({
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
   pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
-  slotPricing: z.enum(["Same", "Different", "Tiered"]).optional(),
+  slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),
   interruption: z.enum(["stop", "continue"]).optional(),
   payment: z.enum(["atStart", "atEnd"]).optional(),
@@ -134,7 +134,7 @@ export const vendorModelUpdateSchema = z.object({
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
   pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
-  slotPricing: z.enum(["Same", "Different", "Tiered"]).optional(),
+  slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),
   interruption: z.enum(["stop", "continue"]).optional(),
   payment: z.enum(["atStart", "atEnd"]).optional(),
@@ -146,8 +146,10 @@ const offeringSignalSchema = z.object({
   duration: z.number().int().positive(),
 });
 
-const variablePricingSchema = z.object({
+const variablePricingTierSchema = z.object({
   type: z.literal("variable"),
+  id: z.string().min(1),
+  name: z.string().min(1).max(255),
   currencyCode: z.string().length(3),
   startPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
   startDuration: z.number().int().positive(),
@@ -158,52 +160,47 @@ const variablePricingSchema = z.object({
   pinNumber: z.number().int().min(0).max(25),
 });
 
-const fixedPricingSchema = z.object({
+const fixedPricingTierSchema = z.object({
   type: z.literal("fixed"),
+  id: z.string().min(1),
+  name: z.string().min(1).max(255),
   currencyCode: z.string().length(3),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/),
   signals: z.array(offeringSignalSchema),
 });
 
-const slotPricingSchema = z.object({
-  name: z.string().min(1).max(255),
-  pricing: z.discriminatedUnion("type", [variablePricingSchema, fixedPricingSchema]),
-});
-
-const multiSlotPricingSchema = z.object({
-  type: z.literal("multi"),
-  slots: z.array(slotPricingSchema).min(1),
-});
-
-const vendorOfferingPricingSchema = z.discriminatedUnion("type", [
-  variablePricingSchema,
-  fixedPricingSchema,
-  multiSlotPricingSchema,
+const pricingTierSchema = z.discriminatedUnion("type", [
+  variablePricingTierSchema,
+  fixedPricingTierSchema,
 ]);
 
 export const vendorOfferingCreateSchema = z.object({
   vendorLocationId: uuidSchema,
   vendorModelId: uuidSchema,
   name: z.string().min(1).max(255),
-  pricing: vendorOfferingPricingSchema,
+  pricingTiers: z.array(pricingTierSchema),
 });
 
 export const vendorOfferingUpdateSchema = z.object({
   vendorLocationId: uuidSchema.optional(),
   vendorModelId: uuidSchema.optional(),
   name: z.string().min(1).max(255).optional(),
-  pricing: vendorOfferingPricingSchema.optional(),
+  pricingTiers: z.array(pricingTierSchema).optional(),
 });
 
 export const vendorInstallationCreateSchema = z.object({
   walletAddress: ethAddressSchema,
   vendorOfferingId: uuidSchema,
   label: z.string().min(1).max(255),
+  pricingTierId: z.string().min(1).optional(),
+  pricingTier: pricingTierSchema.optional(),
 });
 
 export const vendorInstallationUpdateSchema = z.object({
   label: z.string().min(1).max(255).optional(),
   vendorOfferingId: uuidSchema.optional(),
+  pricingTierId: z.string().min(1).nullable().optional(),
+  pricingTier: pricingTierSchema.nullable().optional(),
 });
 
 // Entity schemas
