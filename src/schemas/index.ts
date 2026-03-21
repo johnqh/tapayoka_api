@@ -203,6 +203,30 @@ export const vendorInstallationUpdateSchema = z.object({
   pricingTier: pricingTierSchema.nullable().optional(),
 });
 
+// Vendor installation slot schemas
+export const vendorInstallationSlotCreateSchema = z.object({
+  label: z.string().min(1).max(255),
+  row: z.string().max(50).optional(),
+  column: z.string().max(50).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  pricingTierId: z.string().min(1).optional(),
+  pricingTier: pricingTierSchema.optional(),
+});
+
+export const vendorInstallationSlotUpdateSchema = z.object({
+  label: z.string().min(1).max(255).optional(),
+  row: z.string().max(50).nullable().optional(),
+  column: z.string().max(50).nullable().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  pricingTierId: z.string().min(1).nullable().optional(),
+  pricingTier: pricingTierSchema.nullable().optional(),
+});
+
+export const vendorInstallationSlotBulkCreateSchema = z.object({
+  rows: z.array(z.string().min(1).max(50)).min(1).max(26),
+  columns: z.array(z.string().min(1).max(50)).min(1).max(50),
+});
+
 // Entity schemas
 export const entitySlugParamSchema = z.object({
   entitySlug: z.string().min(1),

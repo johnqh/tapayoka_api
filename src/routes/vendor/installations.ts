@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorInstallations,
+  vendorInstallationSlots,
   vendorOfferings,
   vendorLocations,
 } from "../../db/schema.ts";
@@ -74,9 +75,23 @@ installations.get("/service/:serviceId", async c => {
   }
 
   const results = await db
-    .select()
+    .select({
+      walletAddress: vendorInstallations.walletAddress,
+      vendorOfferingId: vendorInstallations.vendorOfferingId,
+      label: vendorInstallations.label,
+      pricingTierId: vendorInstallations.pricingTierId,
+      pricingTier: vendorInstallations.pricingTier,
+      createdAt: vendorInstallations.createdAt,
+      updatedAt: vendorInstallations.updatedAt,
+      slotCount: count(vendorInstallationSlots.id),
+    })
     .from(vendorInstallations)
-    .where(eq(vendorInstallations.vendorOfferingId, serviceId));
+    .leftJoin(
+      vendorInstallationSlots,
+      eq(vendorInstallations.walletAddress, vendorInstallationSlots.installationWalletAddress)
+    )
+    .where(eq(vendorInstallations.vendorOfferingId, serviceId))
+    .groupBy(vendorInstallations.walletAddress);
 
   return c.json(successResponse(results));
 });

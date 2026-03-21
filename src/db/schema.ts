@@ -337,3 +337,27 @@ export const vendorInstallations = tapayoka.table(
     index("vendor_installations_offering_idx").on(table.vendorOfferingId),
   ]
 );
+
+export const vendorInstallationSlots = tapayoka.table(
+  "vendor_installation_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    installationWalletAddress: varchar("installation_wallet_address", { length: 42 })
+      .notNull()
+      .references(() => vendorInstallations.walletAddress, { onDelete: "cascade" }),
+    label: varchar("label", { length: 255 }).notNull(),
+    row: varchar("row", { length: 50 }),
+    column: varchar("column", { length: 50 }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    pricingTierId: varchar("pricing_tier_id", { length: 255 }),
+    pricingTier: jsonb("pricing_tier"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  table => [
+    index("vendor_installation_slots_installation_idx").on(table.installationWalletAddress),
+    unique("vendor_installation_slots_installation_label_unique").on(
+      table.installationWalletAddress, table.label
+    ),
+  ]
+);

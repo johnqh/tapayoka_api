@@ -428,6 +428,24 @@ export async function initDatabase() {
     END $$;
   `);
 
+  // Create vendor_installation_slots table
+  await connection`
+    CREATE TABLE IF NOT EXISTS tapayoka.vendor_installation_slots (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      installation_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.vendor_installations(wallet_address) ON DELETE CASCADE,
+      label VARCHAR(255) NOT NULL,
+      "row" VARCHAR(50),
+      "column" VARCHAR(50),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      pricing_tier_id VARCHAR(255),
+      pricing_tier JSONB,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(installation_wallet_address, label)
+    )
+  `;
+  await connection`CREATE INDEX IF NOT EXISTS vendor_installation_slots_installation_idx ON tapayoka.vendor_installation_slots(installation_wallet_address)`;
+
   // Add pricing_tier_id and pricing_tier columns to vendor_installations
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;
