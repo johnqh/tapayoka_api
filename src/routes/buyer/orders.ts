@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { orders, offerings, devices } from "../../db/schema.ts";
 import {
@@ -31,6 +31,23 @@ function calculateAuthorizedSeconds(
       return Math.floor(amountCents / 25) * minutesPer25c * 60;
   }
 }
+
+/**
+ * GET / - List orders for the authenticated buyer
+ */
+buyerOrders.get("/", async c => {
+  const buyerUid = c.get("firebaseUid") as string;
+  const db = getDb();
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.buyerUid, buyerUid))
+    .orderBy(desc(orders.createdAt))
+    .limit(50);
+
+  return c.json(successResponse(rows));
+});
 
 /**
  * POST / - Create a new order
