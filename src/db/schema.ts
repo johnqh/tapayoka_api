@@ -82,7 +82,13 @@ export const vendorModelPaymentEnum = tapayoka.enum("vendor_model_payment", [
 
 export const vendorModelSlotEnum = tapayoka.enum("vendor_model_slot", [
   "single",
-  "multi",
+  "multi1D",
+  "multi2D",
+]);
+
+export const vendorModelSlotPricingEnum = tapayoka.enum("vendor_model_slot_pricing", [
+  "Same",
+  "Different",
 ]);
 
 // =============================================================================
@@ -272,6 +278,7 @@ export const vendorModels = tapayoka.table(
     type: vendorModelTypeEnum("type"),
     pricing: vendorModelPricingEnum("pricing"),
     slot: vendorModelSlotEnum("slot"),
+    slotPricing: vendorModelSlotPricingEnum("slot_pricing"),
     action: vendorModelActionEnum("action"),
     interruption: vendorModelInterruptionEnum("interruption"),
     payment: vendorModelPaymentEnum("payment"),

@@ -333,6 +333,18 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_equipment_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
 
+  // Fix stale FK: vendor_equipments_vendor_service_id_fkey still points at vendor_services
+  await connection.unsafe(`
+    DO $$ BEGIN
+      ALTER TABLE tapayoka.vendor_installations DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_service_id_fkey;
+      ALTER TABLE tapayoka.vendor_installations DROP CONSTRAINT IF EXISTS vendor_equipments_vendor_offering_id_fkey;
+      ALTER TABLE tapayoka.vendor_installations
+        ADD CONSTRAINT vendor_installations_vendor_offering_id_fkey
+        FOREIGN KEY (vendor_offering_id) REFERENCES tapayoka.vendor_offerings(id);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
   // Rename vendor_installations.name → label
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN name TO label; EXCEPTION WHEN undefined_column THEN NULL; END $$;
@@ -343,6 +355,32 @@ export async function initDatabase() {
     DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_slot AS ENUM ('single', 'multi'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `);
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS slot tapayoka.vendor_model_slot`;
+
+  // Migrate vendor_model_slot enum: add multi1D, multi2D, migrate multi -> multi1D, remove multi
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'multi1D' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_slot' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_slot ADD VALUE 'multi1D';
+      END IF;
+    END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'multi2D' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_slot' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_slot ADD VALUE 'multi2D';
+      END IF;
+    END $$;
+  `);
+  // Migrate existing 'multi' values to 'multi1D'
+  await connection.unsafe(`
+    UPDATE tapayoka.vendor_models SET slot = 'multi1D' WHERE slot = 'multi';
+  `);
+
+  // Add slot_pricing enum + column to vendor_models
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_slot_pricing AS ENUM ('Same', 'Different'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS slot_pricing tapayoka.vendor_model_slot_pricing`;
 
   // Migrate vendor_offerings: add pricing JSONB, migrate existing data, drop old columns
   await connection.unsafe(`
