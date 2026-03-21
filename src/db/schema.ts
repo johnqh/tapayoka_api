@@ -89,6 +89,7 @@ export const vendorModelSlotEnum = tapayoka.enum("vendor_model_slot", [
 export const vendorModelSlotPricingEnum = tapayoka.enum("vendor_model_slot_pricing", [
   "Same",
   "Different",
+  "Tiered",
 ]);
 
 // =============================================================================

@@ -382,6 +382,15 @@ export async function initDatabase() {
   `);
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS slot_pricing tapayoka.vendor_model_slot_pricing`;
 
+  // Add Tiered to slot_pricing enum
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'Tiered' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_slot_pricing' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_slot_pricing ADD VALUE 'Tiered';
+      END IF;
+    END $$;
+  `);
+
   // Migrate vendor_offerings: add pricing JSONB, migrate existing data, drop old columns
   await connection.unsafe(`
     DO $$ BEGIN
