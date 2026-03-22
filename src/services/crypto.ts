@@ -36,7 +36,8 @@ export function verifySignature(
   expectedAddress: string
 ): boolean {
   try {
-    const recovered = ethers.verifyMessage(message, signature);
+    const sig = signature.startsWith("0x") ? signature : `0x${signature}`;
+    const recovered = ethers.verifyMessage(message, sig);
     return recovered.toLowerCase() === expectedAddress.toLowerCase();
   } catch {
     return false;
