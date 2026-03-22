@@ -127,7 +127,6 @@ export const vendorModelCreateSchema = z.object({
   action: z.enum(["timed", "sequence"]).optional(),
   interruption: z.enum(["stop", "continue"]).optional(),
   payment: z.enum(["atStart", "atEnd"]).optional(),
-  schedule: z.array(dailyScheduleSchema).optional(),
 });
 
 export const vendorModelUpdateSchema = z.object({
@@ -139,7 +138,6 @@ export const vendorModelUpdateSchema = z.object({
   action: z.enum(["timed", "sequence"]).optional(),
   interruption: z.enum(["stop", "continue"]).optional(),
   payment: z.enum(["atStart", "atEnd"]).optional(),
-  schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
 const offeringSignalSchema = z.object({
@@ -180,6 +178,7 @@ export const vendorOfferingCreateSchema = z.object({
   vendorModelId: uuidSchema,
   name: z.string().min(1).max(255),
   pricingTiers: z.array(pricingTierSchema),
+  schedule: z.array(dailyScheduleSchema).optional(),
 });
 
 export const vendorOfferingUpdateSchema = z.object({
@@ -187,21 +186,18 @@ export const vendorOfferingUpdateSchema = z.object({
   vendorModelId: uuidSchema.optional(),
   name: z.string().min(1).max(255).optional(),
   pricingTiers: z.array(pricingTierSchema).optional(),
+  schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
 export const vendorInstallationCreateSchema = z.object({
   walletAddress: ethAddressSchema,
   vendorOfferingId: uuidSchema,
   label: z.string().min(1).max(255),
-  pricingTierId: z.string().min(1).optional(),
-  pricingTier: pricingTierSchema.optional(),
 });
 
 export const vendorInstallationUpdateSchema = z.object({
   label: z.string().min(1).max(255).optional(),
   vendorOfferingId: uuidSchema.optional(),
-  pricingTierId: z.string().min(1).nullable().optional(),
-  pricingTier: pricingTierSchema.nullable().optional(),
 });
 
 // Vendor installation slot schemas

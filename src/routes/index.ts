@@ -11,6 +11,7 @@ import buyerDevices from "./buyer/devices.ts";
 import buyerOrders from "./buyer/orders.ts";
 import buyerAuthorizations from "./buyer/authorizations.ts";
 import buyerSlots from "./buyer/slots.ts";
+import buyerInstallations from "./buyer/installations.ts";
 import telemetry from "./buyer/telemetry.ts";
 
 // Entity/vendor routes
@@ -39,6 +40,7 @@ buyerRoutes.route("/devices", buyerDevices);
 buyerRoutes.route("/orders", buyerOrders);
 buyerRoutes.route("/authorizations", buyerAuthorizations);
 buyerRoutes.route("/slots", buyerSlots);
+buyerRoutes.route("/installations", buyerInstallations);
 buyerRoutes.route("/telemetry", telemetry);
 routes.route("/buyer", buyerRoutes);
 

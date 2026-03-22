@@ -7,6 +7,7 @@ import {
   vendorInstallationSlots,
   vendorOfferings,
   vendorLocations,
+  vendorModels,
 } from "../../db/schema.ts";
 import {
   vendorInstallationCreateSchema,
@@ -79,8 +80,7 @@ installations.get("/service/:serviceId", async c => {
       walletAddress: vendorInstallations.walletAddress,
       vendorOfferingId: vendorInstallations.vendorOfferingId,
       label: vendorInstallations.label,
-      pricingTierId: vendorInstallations.pricingTierId,
-      pricingTier: vendorInstallations.pricingTier,
+      status: vendorInstallations.status,
       createdAt: vendorInstallations.createdAt,
       updatedAt: vendorInstallations.updatedAt,
       slotCount: count(vendorInstallationSlots.id),
@@ -141,6 +141,24 @@ installations.post(
       .insert(vendorInstallations)
       .values(data)
       .returning();
+
+    // Auto-create slot for single-slot models
+    const [offering] = await db
+      .select({ modelSlot: vendorModels.slot })
+      .from(vendorOfferings)
+      .innerJoin(vendorModels, eq(vendorOfferings.vendorModelId, vendorModels.id))
+      .where(eq(vendorOfferings.id, data.vendorOfferingId))
+      .limit(1);
+
+    if (offering && (offering.modelSlot === "single" || offering.modelSlot === null)) {
+      await db
+        .insert(vendorInstallationSlots)
+        .values({
+          installationWalletAddress: data.walletAddress,
+          label: data.label,
+          sortOrder: 0,
+        });
+    }
 
     return c.json(successResponse(installation), 201);
   }
@@ -248,7 +266,8 @@ installations.delete("/:walletAddress", async c => {
   }
 
   await db
-    .delete(vendorInstallations)
+    .update(vendorInstallations)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorInstallations.walletAddress, walletAddress));
   return c.json(successResponse({ deleted: true }));
 });

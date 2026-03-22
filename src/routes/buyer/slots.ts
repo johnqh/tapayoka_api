@@ -62,4 +62,42 @@ buyerSlots.get("/:walletAddress", async c => {
   return c.json(successResponse(result));
 });
 
+/**
+ * GET /detail/:slotId - Get single slot detail for buyer
+ */
+buyerSlots.get("/detail/:slotId", async c => {
+  const slotId = c.req.param("slotId");
+  const db = getDb();
+
+  const [slot] = await db
+    .select()
+    .from(vendorInstallationSlots)
+    .where(eq(vendorInstallationSlots.id, slotId))
+    .limit(1);
+
+  if (!slot) {
+    return c.json(successResponse(null));
+  }
+
+  // Check availability
+  const activeOrders = await db
+    .select({ slotId: orders.slotId })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.slotId, slotId),
+        inArray(orders.status, [...activeStatuses])
+      )
+    )
+    .limit(1);
+
+  return c.json(
+    successResponse({
+      label: slot.label,
+      pricingTier: slot.pricingTier as PricingTier | null,
+      available: activeOrders.length === 0,
+    })
+  );
+});
+
 export default buyerSlots;

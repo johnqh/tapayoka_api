@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, ne, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorModels,
@@ -41,7 +41,7 @@ models.get("/", async c => {
   const results = await db
     .select()
     .from(vendorModels)
-    .where(eq(vendorModels.entityId, result.entity.id));
+    .where(and(eq(vendorModels.entityId, result.entity.id), ne(vendorModels.status, "Deleted")));
   return c.json(successResponse(results));
 });
 
@@ -169,24 +169,9 @@ models.delete("/:id", async c => {
     return c.json(errorResponse("Model not found"), 404);
   }
 
-  // Check for associated offerings
-  const [hasOfferings] = await db
-    .select()
-    .from(vendorOfferings)
-    .where(eq(vendorOfferings.vendorModelId, id))
-    .limit(1);
-
-  if (hasOfferings) {
-    return c.json(
-      errorResponse(
-        "Cannot delete model with associated offerings. Remove offerings first."
-      ),
-      409
-    );
-  }
-
   await db
-    .delete(vendorModels)
+    .update(vendorModels)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorModels.id, id));
   return c.json(successResponse({ deleted: true }));
 });

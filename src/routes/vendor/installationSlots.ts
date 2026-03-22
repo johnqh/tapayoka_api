@@ -273,7 +273,8 @@ installationSlots.delete("/:slotId", async c => {
   }
 
   await db
-    .delete(vendorInstallationSlots)
+    .update(vendorInstallationSlots)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorInstallationSlots.id, slotId));
   return c.json(successResponse({ deleted: true }));
 });
@@ -304,7 +305,8 @@ installationSlots.delete("/installation/:walletAddress", async c => {
   }
 
   await db
-    .delete(vendorInstallationSlots)
+    .update(vendorInstallationSlots)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorInstallationSlots.installationWalletAddress, walletAddress));
   return c.json(successResponse({ deleted: true }));
 });

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, ne, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorLocations,
@@ -41,7 +41,7 @@ locations.get("/", async c => {
   const results = await db
     .select()
     .from(vendorLocations)
-    .where(eq(vendorLocations.entityId, result.entity.id));
+    .where(and(eq(vendorLocations.entityId, result.entity.id), ne(vendorLocations.status, "Deleted")));
   return c.json(successResponse(results));
 });
 
@@ -169,23 +169,10 @@ locations.delete("/:id", async c => {
     return c.json(errorResponse("Location not found"), 404);
   }
 
-  // Check for associated offerings
-  const [hasOfferings] = await db
-    .select()
-    .from(vendorOfferings)
-    .where(eq(vendorOfferings.vendorLocationId, id))
-    .limit(1);
-
-  if (hasOfferings) {
-    return c.json(
-      errorResponse(
-        "Cannot delete location with associated offerings. Remove offerings first."
-      ),
-      409
-    );
-  }
-
-  await db.delete(vendorLocations).where(eq(vendorLocations.id, id));
+  await db
+    .update(vendorLocations)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
+    .where(eq(vendorLocations.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 

@@ -6,7 +6,6 @@ import {
   vendorOfferings,
   vendorLocations,
   vendorModels,
-  vendorInstallations,
 } from "../../db/schema.ts";
 import {
   vendorOfferingCreateSchema,
@@ -239,24 +238,10 @@ vendorOfferingsRoute.delete("/:id", async c => {
     return c.json(errorResponse("Offering not found"), 404);
   }
 
-  // Check for associated installations
-  const [hasInstallations] = await db
-    .select()
-    .from(vendorInstallations)
-    .where(eq(vendorInstallations.vendorOfferingId, id))
-    .limit(1);
-
-  if (hasInstallations) {
-    return c.json(
-      errorResponse(
-        "Cannot delete offering with associated installations. Remove installations first."
-      ),
-      409
-    );
-  }
-
-  // Controls cascade-delete via FK
-  await db.delete(vendorOfferings).where(eq(vendorOfferings.id, id));
+  await db
+    .update(vendorOfferings)
+    .set({ status: "Deleted" as const, updatedAt: new Date() })
+    .where(eq(vendorOfferings.id, id));
   return c.json(successResponse({ deleted: true }));
 });
 

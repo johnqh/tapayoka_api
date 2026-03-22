@@ -93,6 +93,12 @@ export const vendorModelSlotPricingEnum = tapayoka.enum("vendor_model_slot_prici
   "Unique",
 ]);
 
+export const vendorEntityStatusEnum = tapayoka.enum("vendor_entity_status", [
+  "Active",
+  "Inactive",
+  "Deleted",
+]);
+
 // =============================================================================
 // Entity Tables (from entity_service)
 // =============================================================================
@@ -266,6 +272,7 @@ export const vendorLocations = tapayoka.table(
     stateProvince: varchar("state_province", { length: 255 }).notNull(),
     zipcode: varchar("zipcode", { length: 20 }).notNull(),
     country: varchar("country", { length: 100 }).notNull(),
+    status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -287,7 +294,7 @@ export const vendorModels = tapayoka.table(
     action: vendorModelActionEnum("action"),
     interruption: vendorModelInterruptionEnum("interruption"),
     payment: vendorModelPaymentEnum("payment"),
-    schedule: jsonb("schedule"),
+    status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -308,6 +315,8 @@ export const vendorOfferings = tapayoka.table(
       .references(() => vendorModels.id),
     name: varchar("name", { length: 255 }).notNull(),
     pricingTiers: jsonb("pricing_tiers").notNull(),
+    schedule: jsonb("schedule"),
+    status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -331,8 +340,7 @@ export const vendorInstallations = tapayoka.table(
       .notNull()
       .references(() => vendorOfferings.id),
     label: varchar("label", { length: 255 }).notNull(),
-    pricingTierId: varchar("pricing_tier_id", { length: 255 }),
-    pricingTier: jsonb("pricing_tier"),
+    status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -354,6 +362,7 @@ export const vendorInstallationSlots = tapayoka.table(
     sortOrder: integer("sort_order").notNull().default(0),
     pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     pricingTier: jsonb("pricing_tier"),
+    status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

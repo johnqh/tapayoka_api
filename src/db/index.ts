@@ -475,6 +475,47 @@ export async function initDatabase() {
     END $$;
   `);
 
+  // --- Vendor entity status enum + status columns ---
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_entity_status AS ENUM ('Active', 'Inactive', 'Deleted'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  `);
+  await connection`ALTER TABLE tapayoka.vendor_locations ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_offerings ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+  await connection`ALTER TABLE tapayoka.vendor_installation_slots ADD COLUMN IF NOT EXISTS status tapayoka.vendor_entity_status NOT NULL DEFAULT 'Active'`;
+
+  // --- Move schedule from vendor_models to vendor_offerings ---
+  await connection`ALTER TABLE tapayoka.vendor_offerings ADD COLUMN IF NOT EXISTS schedule JSONB`;
+  // Migrate schedule data: copy from model to each offering that references it
+  await connection.unsafe(`
+    UPDATE tapayoka.vendor_offerings vo
+    SET schedule = (SELECT schedule FROM tapayoka.vendor_models vm WHERE vm.id = vo.vendor_model_id)
+    WHERE vo.schedule IS NULL
+      AND EXISTS (SELECT 1 FROM tapayoka.vendor_models vm WHERE vm.id = vo.vendor_model_id AND vm.schedule IS NOT NULL)
+  `);
+  await connection.unsafe(`
+    ALTER TABLE tapayoka.vendor_models DROP COLUMN IF EXISTS schedule
+  `);
+
+  // --- Single-slot migration: auto-create slot for single-slot installations without slots ---
+  await connection.unsafe(`
+    INSERT INTO tapayoka.vendor_installation_slots (installation_wallet_address, label, sort_order, pricing_tier_id, pricing_tier)
+    SELECT vi.wallet_address, vi.label, 0, vi.pricing_tier_id, vi.pricing_tier
+    FROM tapayoka.vendor_installations vi
+    JOIN tapayoka.vendor_offerings vo ON vo.id = vi.vendor_offering_id
+    JOIN tapayoka.vendor_models vm ON vm.id = vo.vendor_model_id
+    WHERE (vm.slot = 'single' OR vm.slot IS NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM tapayoka.vendor_installation_slots vis
+        WHERE vis.installation_wallet_address = vi.wallet_address
+      )
+  `);
+
+  // Drop pricing columns from vendor_installations (now lives on slots)
+  await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier_id`);
+  await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier`);
+
   // Create indexes
   await connection`CREATE INDEX IF NOT EXISTS devices_entity_idx ON tapayoka.devices(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS offerings_entity_idx ON tapayoka.offerings(entity_id)`;
