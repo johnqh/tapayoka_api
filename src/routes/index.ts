@@ -33,10 +33,12 @@ const routes = new Hono();
 // --- Public routes (no auth) ---
 routes.route("/health", health);
 
-// --- Buyer routes (Firebase auth, buyer role) ---
+// --- Public buyer routes (no auth) ---
+routes.route("/buyer/devices", buyerDevices);
+
+// --- Buyer routes (Firebase auth) ---
 const buyerRoutes = new Hono<AppEnv>();
 buyerRoutes.use("*", firebaseAuth);
-buyerRoutes.route("/devices", buyerDevices);
 buyerRoutes.route("/orders", buyerOrders);
 buyerRoutes.route("/authorizations", buyerAuthorizations);
 buyerRoutes.route("/slots", buyerSlots);
