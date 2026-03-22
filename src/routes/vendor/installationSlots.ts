@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorInstallationSlots,
@@ -117,13 +117,36 @@ installationSlots.post(
       return c.json(errorResponse("Installation not found"), 404);
     }
 
-    const [slot] = await db
-      .insert(vendorInstallationSlots)
-      .values({
-        installationWalletAddress: walletAddress,
-        ...data,
-      })
-      .returning();
+    // Check for soft-deleted slot with same label
+    const [existingSlot] = await db
+      .select()
+      .from(vendorInstallationSlots)
+      .where(and(
+        eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
+        eq(vendorInstallationSlots.label, data.label),
+      ))
+      .limit(1);
+
+    let slot;
+    if (existingSlot && existingSlot.status === "Deleted") {
+      const [reactivated] = await db
+        .update(vendorInstallationSlots)
+        .set({ ...data, installationWalletAddress: walletAddress, status: "Active" as const, updatedAt: new Date() })
+        .where(eq(vendorInstallationSlots.id, existingSlot.id))
+        .returning();
+      slot = reactivated;
+    } else if (existingSlot) {
+      return c.json(errorResponse("A slot with this label already exists"), 409);
+    } else {
+      const [created] = await db
+        .insert(vendorInstallationSlots)
+        .values({
+          installationWalletAddress: walletAddress,
+          ...data,
+        })
+        .returning();
+      slot = created;
+    }
 
     return c.json(successResponse(slot), 201);
   }
@@ -172,6 +195,16 @@ installationSlots.post(
     const slots = await db
       .insert(vendorInstallationSlots)
       .values(values)
+      .onConflictDoUpdate({
+        target: [vendorInstallationSlots.installationWalletAddress, vendorInstallationSlots.label],
+        set: {
+          row: sql`excluded.row`,
+          column: sql`excluded.column`,
+          sortOrder: sql`excluded.sort_order`,
+          status: "Active" as const,
+          updatedAt: new Date(),
+        },
+      })
       .returning();
 
     return c.json(successResponse(slots), 201);

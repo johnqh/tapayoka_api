@@ -126,15 +126,12 @@ vendorOfferingsRoute.post(
       .where(
         and(
           eq(vendorOfferings.vendorLocationId, data.vendorLocationId),
-          eq(
-            vendorOfferings.vendorModelId,
-            data.vendorModelId
-          )
+          eq(vendorOfferings.vendorModelId, data.vendorModelId)
         )
       )
       .limit(1);
 
-    if (existing) {
+    if (existing && existing.status !== "Deleted") {
       return c.json(
         errorResponse(
           "An offering already exists for this location and model combination"
@@ -143,10 +140,22 @@ vendorOfferingsRoute.post(
       );
     }
 
-    const [offering] = await db
-      .insert(vendorOfferings)
-      .values(data)
-      .returning();
+    let offering;
+    if (existing) {
+      // Reactivate soft-deleted offering
+      const [reactivated] = await db
+        .update(vendorOfferings)
+        .set({ ...data, status: "Active" as const, updatedAt: new Date() })
+        .where(eq(vendorOfferings.id, existing.id))
+        .returning();
+      offering = reactivated;
+    } else {
+      const [created] = await db
+        .insert(vendorOfferings)
+        .values(data)
+        .returning();
+      offering = created;
+    }
 
     return c.json(successResponse(offering), 201);
   }

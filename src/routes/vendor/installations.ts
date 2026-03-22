@@ -123,24 +123,36 @@ installations.post(
       return c.json(errorResponse("Offering not found"), 404);
     }
 
-    // Check for duplicate wallet address
+    // Check for existing wallet address
     const [existing] = await db
       .select()
       .from(vendorInstallations)
       .where(eq(vendorInstallations.walletAddress, data.walletAddress))
       .limit(1);
 
-    if (existing) {
+    if (existing && existing.status !== "Deleted") {
       return c.json(
         errorResponse("Installation with this wallet address already exists"),
         409
       );
     }
 
-    const [installation] = await db
-      .insert(vendorInstallations)
-      .values(data)
-      .returning();
+    let installation;
+    if (existing) {
+      // Reactivate soft-deleted installation
+      const [reactivated] = await db
+        .update(vendorInstallations)
+        .set({ ...data, status: "Active" as const, updatedAt: new Date() })
+        .where(eq(vendorInstallations.walletAddress, data.walletAddress))
+        .returning();
+      installation = reactivated;
+    } else {
+      const [created] = await db
+        .insert(vendorInstallations)
+        .values(data)
+        .returning();
+      installation = created;
+    }
 
     // Auto-create slot for single-slot models
     const [offering] = await db
@@ -151,13 +163,30 @@ installations.post(
       .limit(1);
 
     if (offering && (offering.modelSlot === "single" || offering.modelSlot === null)) {
-      await db
-        .insert(vendorInstallationSlots)
-        .values({
-          installationWalletAddress: data.walletAddress,
-          label: data.label,
-          sortOrder: 0,
-        });
+      // Reactivate soft-deleted slot or create new one
+      const [existingSlot] = await db
+        .select()
+        .from(vendorInstallationSlots)
+        .where(and(
+          eq(vendorInstallationSlots.installationWalletAddress, data.walletAddress),
+          eq(vendorInstallationSlots.label, data.label),
+        ))
+        .limit(1);
+
+      if (existingSlot) {
+        await db
+          .update(vendorInstallationSlots)
+          .set({ status: "Active" as const, updatedAt: new Date() })
+          .where(eq(vendorInstallationSlots.id, existingSlot.id));
+      } else {
+        await db
+          .insert(vendorInstallationSlots)
+          .values({
+            installationWalletAddress: data.walletAddress,
+            label: data.label,
+            sortOrder: 0,
+          });
+      }
     }
 
     return c.json(successResponse(installation), 201);
