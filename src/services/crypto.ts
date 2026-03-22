@@ -38,8 +38,10 @@ export function verifySignature(
   try {
     const sig = signature.startsWith("0x") ? signature : `0x${signature}`;
     const recovered = ethers.verifyMessage(message, sig);
+    console.log("[crypto] verifySignature", { recovered, expectedAddress, match: recovered.toLowerCase() === expectedAddress.toLowerCase() });
     return recovered.toLowerCase() === expectedAddress.toLowerCase();
-  } catch {
+  } catch (e) {
+    console.log("[crypto] verifySignature error:", e);
     return false;
   }
 }
