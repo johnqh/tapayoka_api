@@ -19,7 +19,7 @@ export const deviceVerifySchema = z.object({
 
 export const createOrderSchema = z.object({
   deviceWalletAddress: ethAddressSchema,
-  offeringId: uuidSchema,
+  pricingTierId: z.string().min(1),
   amountCents: z.number().int().positive(),
   slotId: z.string().uuid().optional(),
 });
@@ -38,59 +38,6 @@ export const telemetryEventSchema = z.object({
   direction: z.enum(["PI_TO_SRV", "SRV_TO_PI"]),
   ok: z.boolean(),
   details: z.string().optional(),
-});
-
-// Vendor schemas
-export const deviceCreateSchema = z.object({
-  walletAddress: ethAddressSchema,
-  label: z.string().min(1).max(255),
-  model: z.string().max(255).optional(),
-  location: z.string().max(255).optional(),
-  gpioConfig: z
-    .object({
-      pin: z.number().int().min(0).max(40),
-      activeLow: z.boolean().optional(),
-    })
-    .optional(),
-});
-
-export const deviceUpdateSchema = z.object({
-  label: z.string().min(1).max(255).optional(),
-  model: z.string().max(255).nullable().optional(),
-  location: z.string().max(255).nullable().optional(),
-  gpioConfig: z
-    .object({
-      pin: z.number().int().min(0).max(40),
-      activeLow: z.boolean().optional(),
-    })
-    .nullable()
-    .optional(),
-  status: z
-    .enum(["ACTIVE", "OFFLINE", "MAINTENANCE", "DEACTIVATED"])
-    .optional(),
-});
-
-export const offeringCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  type: z.enum(["TRIGGER", "FIXED", "TIMED"]),
-  priceCents: z.number().int().positive(),
-  fixedMinutes: z.number().int().positive().optional(),
-  minutesPer25c: z.number().int().positive().optional(),
-});
-
-export const offeringUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().nullable().optional(),
-  type: z.enum(["TRIGGER", "FIXED", "TIMED"]).optional(),
-  priceCents: z.number().int().positive().optional(),
-  fixedMinutes: z.number().int().positive().nullable().optional(),
-  minutesPer25c: z.number().int().positive().nullable().optional(),
-  active: z.boolean().optional(),
-});
-
-export const deviceOfferingAssignSchema = z.object({
-  offeringIds: z.array(uuidSchema).min(1),
 });
 
 // Vendor management schemas
@@ -121,7 +68,7 @@ const dailyScheduleSchema = z.object({
 export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "timed"]).optional(),
+  pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),
@@ -132,7 +79,7 @@ export const vendorModelCreateSchema = z.object({
 export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "timed"]).optional(),
+  pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),

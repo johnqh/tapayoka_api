@@ -4,8 +4,8 @@ import { eq, desc, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   orders,
-  offerings,
-  devices,
+  vendorInstallations,
+  vendorOfferings,
   vendorInstallationSlots,
 } from "../../db/schema.ts";
 import {
@@ -14,27 +14,41 @@ import {
   uuidSchema,
 } from "../../schemas/index.ts";
 import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
-import { successResponse, errorResponse, type OfferingType } from "@sudobility/tapayoka_types";
+import { successResponse, errorResponse, type PricingTier } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
 
-/** Calculate authorized seconds based on offering type and amount */
+/** Calculate authorized seconds from a PricingTier */
 function calculateAuthorizedSeconds(
-  type: OfferingType,
+  tier: PricingTier,
   amountCents: number,
-  fixedMinutes: number | null,
-  minutesPer25c: number | null
 ): number {
-  switch (type) {
-    case "TRIGGER":
-      return 0; // Instant activation, no duration
-    case "FIXED":
-      return (fixedMinutes ?? 0) * 60;
-    case "TIMED":
-      if (!minutesPer25c) return 0;
-      return Math.floor(amountCents / 25) * minutesPer25c * 60;
+  if (tier.type === "fixed") {
+    return tier.signals.reduce((sum, s) => sum + s.duration, 0);
   }
+  // timed
+  const startPriceCents = Math.round(parseFloat(tier.startPrice) * 100);
+  const startDurationSeconds =
+    tier.startDurationUnit === "hours"
+      ? tier.startDuration * 3600
+      : tier.startDuration * 60;
+
+  if (amountCents <= startPriceCents) {
+    return startDurationSeconds;
+  }
+
+  const marginalPriceCents = Math.round(parseFloat(tier.marginalPrice) * 100);
+  const marginalDurationSeconds =
+    tier.marginalDurationUnit === "hours"
+      ? tier.marginalDuration * 3600
+      : tier.marginalDuration * 60;
+
+  if (marginalPriceCents <= 0) return startDurationSeconds;
+
+  const extraCents = amountCents - startPriceCents;
+  const extraUnits = Math.floor(extraCents / marginalPriceCents);
+  return startDurationSeconds + extraUnits * marginalDurationSeconds;
 }
 
 /**
@@ -58,41 +72,53 @@ buyerOrders.get("/", async c => {
  * POST / - Create a new order
  */
 buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
-  const { deviceWalletAddress, offeringId, amountCents, slotId } =
+  const { deviceWalletAddress, pricingTierId, amountCents, slotId } =
     c.req.valid("json");
   const buyerUid = c.get("firebaseUid") as string;
 
   const db = getDb();
 
-  // Validate device exists and is active
-  const [device] = await db
+  // Validate installation exists and is active
+  const [installation] = await db
     .select()
-    .from(devices)
-    .where(eq(devices.walletAddress, deviceWalletAddress))
+    .from(vendorInstallations)
+    .where(eq(vendorInstallations.walletAddress, deviceWalletAddress))
     .limit(1);
 
-  if (!device || device.status !== "ACTIVE") {
+  if (!installation || installation.status !== "Active") {
     return c.json(errorResponse("Device not found or inactive"), 404);
   }
 
-  // Validate offering exists and is active
+  // Get the offering's pricing tiers
   const [offering] = await db
     .select()
-    .from(offerings)
-    .where(eq(offerings.id, offeringId))
+    .from(vendorOfferings)
+    .where(eq(vendorOfferings.id, installation.vendorOfferingId))
     .limit(1);
 
-  if (!offering || !offering.active) {
-    return c.json(errorResponse("Offering not found or inactive"), 404);
+  if (!offering) {
+    return c.json(errorResponse("Offering not found"), 404);
   }
 
-  // Validate amount matches offering price
-  if (amountCents < offering.priceCents) {
+  // Find the matching pricing tier
+  const tiers = offering.pricingTiers as PricingTier[];
+  const tier = tiers.find(t => t.id === pricingTierId);
+  if (!tier) {
+    return c.json(errorResponse("Pricing tier not found"), 404);
+  }
+
+  // Validate amount
+  const minCents =
+    tier.type === "fixed"
+      ? Math.round(parseFloat(tier.price) * 100)
+      : Math.round(parseFloat(tier.startPrice) * 100);
+
+  if (amountCents < minCents) {
     return c.json(
       errorResponse(
-        `Amount ${amountCents} is less than offering price ${offering.priceCents}`
+        `Amount ${amountCents} is less than minimum price ${minCents}`,
       ),
-      400
+      400,
     );
   }
 
@@ -106,9 +132,9 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
           eq(vendorInstallationSlots.id, slotId),
           eq(
             vendorInstallationSlots.installationWalletAddress,
-            deviceWalletAddress
-          )
-        )
+            deviceWalletAddress,
+          ),
+        ),
       )
       .limit(1);
 
@@ -116,7 +142,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
       return c.json(errorResponse("Slot not found"), 404);
     }
 
-    // Check slot availability (no active orders for this slot)
+    // Check slot availability
     const [activeOrder] = await db
       .select({ id: orders.id })
       .from(orders)
@@ -128,8 +154,8 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
             "PAID",
             "AUTHORIZED",
             "RUNNING",
-          ] as const)
-        )
+          ] as const),
+        ),
       )
       .limit(1);
 
@@ -138,19 +164,14 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     }
   }
 
-  const authorizedSeconds = calculateAuthorizedSeconds(
-    offering.type as OfferingType,
-    amountCents,
-    offering.fixedMinutes,
-    offering.minutesPer25c
-  );
+  const authorizedSeconds = calculateAuthorizedSeconds(tier, amountCents);
 
   // Create order
   const [order] = await db
     .insert(orders)
     .values({
       deviceWalletAddress,
-      offeringId,
+      pricingTierId,
       buyerUid,
       amountCents,
       authorizedSeconds,
@@ -210,7 +231,6 @@ buyerOrders.post(
     }
 
     try {
-      // Create and confirm Stripe payment
       const paymentIntent = await createPaymentIntent(order.amountCents, {
         orderId: order.id,
         deviceWalletAddress: order.deviceWalletAddress,
@@ -219,7 +239,6 @@ buyerOrders.post(
       const confirmed = await confirmPayment(paymentIntent.id, paymentMethodId);
 
       if (confirmed.status === "succeeded") {
-        // Update order status to PAID
         const [updated] = await db
           .update(orders)
           .set({
@@ -234,11 +253,10 @@ buyerOrders.post(
       } else {
         return c.json(
           errorResponse(`Payment status: ${confirmed.status}`),
-          400
+          400,
         );
       }
     } catch (error: any) {
-      // Update order to FAILED
       await db
         .update(orders)
         .set({ status: "FAILED", updatedAt: new Date() })
@@ -246,10 +264,10 @@ buyerOrders.post(
 
       return c.json(
         errorResponse(error.message ?? "Payment processing failed"),
-        400
+        400,
       );
     }
-  }
+  },
 );
 
 export default buyerOrders;

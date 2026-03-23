@@ -1,66 +1,123 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorInstallations,
   vendorOfferings,
   vendorModels,
+  vendorInstallationSlots,
+  orders,
 } from "../../db/schema.ts";
 import { verifySignature } from "../../services/crypto.ts";
 import { deviceVerifySchema } from "../../schemas/index.ts";
 import {
   successResponse,
   errorResponse,
-  type Offering,
   type PricingTier,
+  type DailySchedule,
+  type DayOfWeek,
   type VendorModelSlot,
+  type VendorModelPricing,
+  type VendorModelSlotPricing,
+  type VendorModelAction,
+  type VendorModelInterruption,
+  type VendorModelPayment,
 } from "@sudobility/tapayoka_types";
 
 const buyerDevices = new Hono();
 
-/** Convert vendor PricingTier[] into legacy Offering[] for the buyer app. */
-function pricingTiersToOfferings(
-  tiers: PricingTier[],
-  vendorOfferingId: string,
-  entityId: string,
-): Offering[] {
-  return tiers.map(tier => {
-    if (tier.type === "fixed") {
-      return {
-        id: tier.id,
-        entityId,
-        name: tier.name,
-        description: null,
-        type: "FIXED" as const,
-        priceCents: Math.round(parseFloat(tier.price) * 100),
-        fixedMinutes: tier.signals.reduce((sum, s) => sum + s.duration, 0) / 60,
-        minutesPer25c: null,
-        active: true,
-        createdAt: null,
-        updatedAt: null,
-      };
-    }
-    // timed
-    return {
-      id: tier.id,
-      entityId,
-      name: tier.name,
-      description: null,
-      type: "TIMED" as const,
-      priceCents: Math.round(parseFloat(tier.startPrice) * 100),
-      fixedMinutes: null,
-      minutesPer25c: null,
-      active: true,
-      createdAt: null,
-      updatedAt: null,
-    };
+const ACTIVE_ORDER_STATUSES = [
+  "CREATED",
+  "PAID",
+  "AUTHORIZED",
+  "RUNNING",
+] as const;
+
+/**
+ * Evaluate operating hours from schedule in given timezone.
+ * Returns operating status and the current period boundaries in UTC.
+ */
+function evaluateOperating(
+  schedule: DailySchedule[] | null,
+  tz: string,
+): { operating: boolean; operatingPeriod: { start: string; end: string } | null } {
+  if (!schedule || schedule.length === 0) {
+    return { operating: true, operatingPeriod: null };
+  }
+
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
+
+  const parts = formatter.formatToParts(now);
+  const weekday = parts.find(p => p.type === "weekday")?.value as DayOfWeek | undefined;
+  const hour = parts.find(p => p.type === "hour")?.value ?? "00";
+  const minute = parts.find(p => p.type === "minute")?.value ?? "00";
+  const currentTime = `${hour}:${minute}`;
+
+  if (!weekday) {
+    return { operating: true, operatingPeriod: null };
+  }
+
+  const matchedEntry = schedule.find(
+    entry => entry.dayOfWeek === weekday && currentTime >= entry.startTime && currentTime <= entry.endTime,
+  );
+
+  if (!matchedEntry) {
+    return { operating: false, operatingPeriod: null };
+  }
+
+  // Compute current period boundaries in UTC
+  // Get today's date in the buyer's timezone
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+  const dateStr = dateFormatter.format(now); // YYYY-MM-DD
+
+  const startLocal = new Date(`${dateStr}T${matchedEntry.startTime}:00`);
+  const endLocal = new Date(`${dateStr}T${matchedEntry.endTime}:00`);
+
+  // Convert from local tz to UTC by computing the offset
+  const utcNow = now.getTime();
+  const localNow = new Date(now.toLocaleString("en-US", { timeZone: tz })).getTime();
+  const offset = localNow - utcNow;
+
+  const startUtc = new Date(startLocal.getTime() - offset);
+  const endUtc = new Date(endLocal.getTime() - offset);
+
+  return {
+    operating: true,
+    operatingPeriod: {
+      start: startUtc.toISOString(),
+      end: endUtc.toISOString(),
+    },
+  };
 }
 
 /**
- * POST /verify - Verify device signature and get available offerings
- * Buyer sends device's signed challenge; server verifies and returns offerings.
+ * Resolve a slot's pricing tier: prefer pricingTierId lookup from offering tiers,
+ * fall back to inline pricingTier field.
+ */
+function resolveSlotPricingTier(
+  slot: { pricingTierId: string | null; pricingTier: unknown },
+  offeringTiers: PricingTier[],
+): PricingTier | null {
+  if (slot.pricingTierId) {
+    const found = offeringTiers.find(t => t.id === slot.pricingTierId);
+    if (found) return found;
+  }
+  return (slot.pricingTier as PricingTier) ?? null;
+}
+
+/**
+ * POST /verify - Verify device signature and return full installation data
+ *
+ * Combines the old verify, installation info, and slots endpoints into one.
+ * No auth required — the BLE signature is the trust mechanism.
  */
 buyerDevices.post(
   "/verify",
@@ -68,16 +125,14 @@ buyerDevices.post(
   async c => {
     const { deviceWalletAddress, signedPayload, signature } =
       c.req.valid("json");
-
-    console.log("[verify] Step 1 — input received", { deviceWalletAddress });
+    const tz = c.req.query("tz") || "UTC";
 
     // Verify the device's signature
     const isValid = verifySignature(
       signedPayload,
       signature,
-      deviceWalletAddress
+      deviceWalletAddress,
     );
-    console.log("[verify] Step 2 — signature valid:", isValid);
     if (!isValid) {
       return c.json(errorResponse("Invalid device signature"), 400);
     }
@@ -94,16 +149,14 @@ buyerDevices.post(
       .from(vendorInstallations)
       .innerJoin(
         vendorOfferings,
-        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id),
       )
       .innerJoin(
         vendorModels,
-        eq(vendorOfferings.vendorModelId, vendorModels.id)
+        eq(vendorOfferings.vendorModelId, vendorModels.id),
       )
       .where(eq(vendorInstallations.walletAddress, deviceWalletAddress))
       .limit(1);
-
-    console.log("[verify] Step 3 — installation lookup:", result ? `found (status=${result.installation.status})` : "NOT FOUND");
 
     if (!result) {
       return c.json(errorResponse("Device not registered"), 404);
@@ -113,35 +166,71 @@ buyerDevices.post(
       return c.json(errorResponse("Device is not active"), 400);
     }
 
-    const slotType = (result.model.slot as VendorModelSlot) ?? null;
-    const tiers = result.offering.pricingTiers as PricingTier[];
-    const offeringsList = pricingTiersToOfferings(
-      tiers,
-      result.offering.id,
-      result.offering.vendorLocationId,
-    );
+    const offeringTiers = result.offering.pricingTiers as PricingTier[];
+    const schedule = result.offering.schedule as DailySchedule[] | null;
 
-    console.log("[verify] Step 4 — slotType:", slotType, "offerings:", offeringsList.length);
+    // Evaluate operating hours
+    const { operating, operatingPeriod } = evaluateOperating(schedule, tz);
+
+    // Fetch slots
+    const slots = await db
+      .select()
+      .from(vendorInstallationSlots)
+      .where(
+        and(
+          eq(vendorInstallationSlots.installationWalletAddress, deviceWalletAddress),
+          eq(vendorInstallationSlots.status, "Active"),
+        ),
+      )
+      .orderBy(vendorInstallationSlots.sortOrder);
+
+    // Check slot availability (batch query for active orders)
+    const slotIds = slots.map(s => s.id);
+    let unavailableSlotIds = new Set<string>();
+
+    if (slotIds.length > 0) {
+      const activeOrders = await db
+        .select({ slotId: orders.slotId })
+        .from(orders)
+        .where(
+          and(
+            inArray(orders.slotId, slotIds),
+            inArray(orders.status, [...ACTIVE_ORDER_STATUSES]),
+          ),
+        );
+      unavailableSlotIds = new Set(
+        activeOrders.map(o => o.slotId).filter((id): id is string => id !== null),
+      );
+    }
 
     return c.json(
       successResponse({
-        device: {
-          walletAddress: result.installation.walletAddress,
-          label: result.installation.label,
-          status: "ACTIVE",
-          entityId: result.offering.vendorLocationId,
-          model: result.model.name,
-          location: null,
-          gpioConfig: null,
-          serverWalletAddress: null,
-          createdAt: result.installation.createdAt,
-          updatedAt: result.installation.updatedAt,
+        model: {
+          name: result.model.name,
+          slot: (result.model.slot as VendorModelSlot) ?? null,
+          pricing: (result.model.pricing as VendorModelPricing) ?? null,
+          slotPricing: (result.model.slotPricing as VendorModelSlotPricing) ?? null,
+          action: (result.model.action as VendorModelAction) ?? null,
+          interruption: (result.model.interruption as VendorModelInterruption) ?? null,
+          payment: (result.model.payment as VendorModelPayment) ?? null,
         },
-        offerings: offeringsList,
-        slotType,
-      })
+        installation: {
+          name: result.installation.label,
+        },
+        operating,
+        operatingPeriod,
+        slots: slots.map(slot => ({
+          id: slot.id,
+          label: slot.label,
+          row: slot.row,
+          column: slot.column,
+          sortOrder: slot.sortOrder,
+          pricingTier: resolveSlotPricingTier(slot, offeringTiers),
+          available: !unavailableSlotIds.has(slot.id),
+        })),
+      }),
     );
-  }
+  },
 );
 
 export default buyerDevices;

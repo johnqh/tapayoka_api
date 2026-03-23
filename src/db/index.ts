@@ -537,6 +537,28 @@ export async function initDatabase() {
   await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier_id`);
   await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier`);
 
+  // Rename vendor_model_pricing 'timed' → 'variable'
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'timed' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_pricing' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_pricing RENAME VALUE 'timed' TO 'variable';
+      END IF;
+    END $$;
+  `);
+
+  // Add pricing_tier_id to orders, make offering_id nullable
+  await connection`ALTER TABLE tapayoka.orders ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'tapayoka' AND table_name = 'orders' AND column_name = 'offering_id' AND is_nullable = 'NO'
+      ) THEN
+        ALTER TABLE tapayoka.orders ALTER COLUMN offering_id DROP NOT NULL;
+      END IF;
+    END $$;
+  `);
+
   // Create indexes
   await connection`CREATE INDEX IF NOT EXISTS devices_entity_idx ON tapayoka.devices(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS offerings_entity_idx ON tapayoka.offerings(entity_id)`;

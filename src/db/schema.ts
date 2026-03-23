@@ -62,7 +62,7 @@ export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
 
 export const vendorModelPricingEnum = tapayoka.enum("vendor_model_pricing", [
   "fixed",
-  "timed",
+  "variable",
 ]);
 
 export const vendorModelActionEnum = tapayoka.enum("vendor_model_action", [
@@ -189,8 +189,8 @@ export const orders = tapayoka.table(
       .notNull()
       .references(() => devices.walletAddress),
     offeringId: uuid("offering_id")
-      .notNull()
       .references(() => offerings.id),
+    pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     buyerUid: varchar("buyer_uid", { length: 128 }),
     amountCents: integer("amount_cents").notNull(),
     authorizedSeconds: integer("authorized_seconds").notNull().default(0),

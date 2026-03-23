@@ -10,16 +10,12 @@ import health from "./public/health.ts";
 import buyerDevices from "./buyer/devices.ts";
 import buyerOrders from "./buyer/orders.ts";
 import buyerAuthorizations from "./buyer/authorizations.ts";
-import buyerSlots from "./buyer/slots.ts";
-import buyerInstallations from "./buyer/installations.ts";
 import telemetry from "./buyer/telemetry.ts";
 
 // Entity/vendor routes
 import entitiesRouter from "./entities.ts";
 import invitationsRouter from "./invitations.ts";
 import meRouter from "./me.ts";
-import vendorDevices from "./vendor/devices.ts";
-import vendorOfferingsLegacy from "./vendor/offerings-legacy.ts";
 import vendorOrders from "./vendor/orders.ts";
 import vendorQr from "./vendor/qr.ts";
 import vendorLocations from "./vendor/locations.ts";
@@ -41,8 +37,6 @@ const buyerRoutes = new Hono<AppEnv>();
 buyerRoutes.use("*", firebaseAuth);
 buyerRoutes.route("/orders", buyerOrders);
 buyerRoutes.route("/authorizations", buyerAuthorizations);
-buyerRoutes.route("/slots", buyerSlots);
-buyerRoutes.route("/installations", buyerInstallations);
 buyerRoutes.route("/telemetry", telemetry);
 routes.route("/buyer", buyerRoutes);
 
@@ -67,8 +61,6 @@ vendorEntityRoutes.route("/models", vendorModels);
 vendorEntityRoutes.route("/offerings", vendorOfferings);
 vendorEntityRoutes.route("/installations", vendorInstallations);
 vendorEntityRoutes.route("/installation-slots", vendorInstallationSlots);
-vendorEntityRoutes.route("/devices", vendorDevices);
-vendorEntityRoutes.route("/services", vendorOfferingsLegacy);
 vendorEntityRoutes.route("/orders", vendorOrders);
 vendorEntityRoutes.route("/qr", vendorQr);
 
