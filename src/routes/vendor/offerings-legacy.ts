@@ -103,9 +103,9 @@ vendorOfferingsLegacy.post("/", zValidator("json", offeringCreateSchema), async 
       400
     );
   }
-  if (data.type === "VARIABLE" && !data.minutesPer25c) {
+  if (data.type === "TIMED" && !data.minutesPer25c) {
     return c.json(
-      errorResponse("VARIABLE offerings require minutesPer25c"),
+      errorResponse("TIMED offerings require minutesPer25c"),
       400
     );
   }

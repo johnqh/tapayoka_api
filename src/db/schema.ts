@@ -26,7 +26,7 @@ export const tapayoka = pgSchema("tapayoka");
 export const offeringTypeEnum = tapayoka.enum("offering_type", [
   "TRIGGER",
   "FIXED",
-  "VARIABLE",
+  "TIMED",
 ]);
 
 export const orderStatusEnum = tapayoka.enum("order_status", [
@@ -62,7 +62,7 @@ export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
 
 export const vendorModelPricingEnum = tapayoka.enum("vendor_model_pricing", [
   "fixed",
-  "variable",
+  "timed",
 ]);
 
 export const vendorModelActionEnum = tapayoka.enum("vendor_model_action", [

@@ -31,7 +31,7 @@ function calculateAuthorizedSeconds(
       return 0; // Instant activation, no duration
     case "FIXED":
       return (fixedMinutes ?? 0) * 60;
-    case "VARIABLE":
+    case "TIMED":
       if (!minutesPer25c) return 0;
       return Math.floor(amountCents / 25) * minutesPer25c * 60;
   }

@@ -8,7 +8,7 @@
         "@hono/zod-validator": "^0.7.5",
         "@sudobility/auth_service": "^1.1.13",
         "@sudobility/entity_service": "^1.0.30",
-        "@sudobility/tapayoka_types": "^0.0.28",
+        "@sudobility/tapayoka_types": "^0.0.30",
         "@sudobility/types": "^1.9.59",
         "drizzle-orm": "^0.45.0",
         "ethers": "^6.13.0",
@@ -243,7 +243,7 @@
 
     "@sudobility/entity_service": ["@sudobility/entity_service@1.0.30", "", { "peerDependencies": { "@sudobility/types": "^1.9.59", "drizzle-orm": "^0.45.0", "hono": "^4.0.0" } }, "sha512-fOUjlMOH2i3Fsm83bGi1IKRmExM8xepWWRnUIiWnk/OI2ZduEj//al59cy6r2clbykuLTlMUdhePTK16jXX/Kg=="],
 
-    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.28", "", { "peerDependencies": { "@sudobility/types": "^1.9.59" } }, "sha512-kOLjgKO+zQx6ihg7bodnQuniXcloiyO7Q7FBWR4omddOy35VUBrqwHB/j0Evs3aCLUFfTZCfxOH1kUQoJe3NkA=="],
+    "@sudobility/tapayoka_types": ["@sudobility/tapayoka_types@0.0.30", "", { "peerDependencies": { "@sudobility/types": "^1.9.59" } }, "sha512-fh2RGpbppdDQCyqzVFd7zS1Nts33ter0OftSa9kl0mf4TdYdnzzgWxJbCknY0V/T13u4nDKZWS6YmlfjmPggGg=="],
 
     "@sudobility/types": ["@sudobility/types@1.9.59", "", {}, "sha512-ysz2JU1wu31H26TktCkgZZD2DQqpMX5KVLMiVuFY7ndPYMjNtoYzZoiigV1juHz0HWSh3LIFbRBR73O6UTg7Aw=="],
 

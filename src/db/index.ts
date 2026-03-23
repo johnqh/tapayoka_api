@@ -40,7 +40,7 @@ export async function initDatabase() {
   const enumDefs = [
     {
       name: "tapayoka.offering_type",
-      values: ["TRIGGER", "FIXED", "VARIABLE"],
+      values: ["TRIGGER", "FIXED", "TIMED"],
     },
     {
       name: "tapayoka.order_status",
@@ -241,6 +241,16 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TYPE tapayoka.service_type RENAME TO offering_type; EXCEPTION WHEN undefined_object OR duplicate_object THEN NULL; END $$;
   `);
 
+  // Rename VARIABLE → TIMED in offering_type enum
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'VARIABLE' AND enumtypid = 'tapayoka.offering_type'::regtype) THEN
+        ALTER TYPE tapayoka.offering_type RENAME VALUE 'VARIABLE' TO 'TIMED';
+      END IF;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $$;
+  `);
+
   // Rename legacy tables
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE IF EXISTS tapayoka.services RENAME TO offerings; EXCEPTION WHEN duplicate_table THEN NULL; END $$;
@@ -286,7 +296,7 @@ export async function initDatabase() {
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
 
   // Add enums and columns to vendor_models
-  // Recreate pricing enum if it has old values (variableAtStart/variableAtEnd → variable)
+  // Recreate pricing enum if it has old values (variableAtStart/variableAtEnd → timed)
   await connection.unsafe(`
     DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'variableAtStart' AND enumtypid = 'tapayoka.vendor_model_pricing'::regtype) THEN
@@ -296,8 +306,19 @@ export async function initDatabase() {
     EXCEPTION WHEN undefined_object THEN NULL;
     END $$;
   `);
+  // Rename 'variable' → 'timed' in vendor_model_pricing enum
   await connection.unsafe(`
-    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'variable'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'variable' AND enumtypid = 'tapayoka.vendor_model_pricing'::regtype) THEN
+        UPDATE tapayoka.vendor_models SET pricing = NULL WHERE pricing = 'variable';
+        ALTER TABLE tapayoka.vendor_models DROP COLUMN IF EXISTS pricing;
+        DROP TYPE tapayoka.vendor_model_pricing;
+      END IF;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_pricing AS ENUM ('fixed', 'timed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `);
   await connection.unsafe(`
     DO $$ BEGIN CREATE TYPE tapayoka.vendor_model_action AS ENUM ('timed', 'sequence'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;

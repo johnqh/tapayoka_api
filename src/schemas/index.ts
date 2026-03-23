@@ -73,7 +73,7 @@ export const deviceUpdateSchema = z.object({
 export const offeringCreateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
-  type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]),
+  type: z.enum(["TRIGGER", "FIXED", "TIMED"]),
   priceCents: z.number().int().positive(),
   fixedMinutes: z.number().int().positive().optional(),
   minutesPer25c: z.number().int().positive().optional(),
@@ -82,7 +82,7 @@ export const offeringCreateSchema = z.object({
 export const offeringUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().nullable().optional(),
-  type: z.enum(["TRIGGER", "FIXED", "VARIABLE"]).optional(),
+  type: z.enum(["TRIGGER", "FIXED", "TIMED"]).optional(),
   priceCents: z.number().int().positive().optional(),
   fixedMinutes: z.number().int().positive().nullable().optional(),
   minutesPer25c: z.number().int().positive().nullable().optional(),
@@ -121,7 +121,7 @@ const dailyScheduleSchema = z.object({
 export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "variable"]).optional(),
+  pricing: z.enum(["fixed", "timed"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),
@@ -132,7 +132,7 @@ export const vendorModelCreateSchema = z.object({
 export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
-  pricing: z.enum(["fixed", "variable"]).optional(),
+  pricing: z.enum(["fixed", "timed"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
   action: z.enum(["timed", "sequence"]).optional(),
@@ -145,8 +145,8 @@ const offeringSignalSchema = z.object({
   duration: z.number().int().positive(),
 });
 
-const variablePricingTierSchema = z.object({
-  type: z.literal("variable"),
+const timedPricingTierSchema = z.object({
+  type: z.literal("timed"),
   id: z.string().min(1),
   name: z.string().min(1).max(255),
   currencyCode: z.string().length(3),
@@ -169,7 +169,7 @@ const fixedPricingTierSchema = z.object({
 });
 
 const pricingTierSchema = z.discriminatedUnion("type", [
-  variablePricingTierSchema,
+  timedPricingTierSchema,
   fixedPricingTierSchema,
 ]);
 

@@ -41,13 +41,13 @@ function pricingTiersToOfferings(
         updatedAt: null,
       };
     }
-    // variable
+    // timed
     return {
       id: tier.id,
       entityId,
       name: tier.name,
       description: null,
-      type: "VARIABLE" as const,
+      type: "TIMED" as const,
       priceCents: Math.round(parseFloat(tier.startPrice) * 100),
       fixedMinutes: null,
       minutesPer25c: null,

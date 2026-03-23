@@ -211,10 +211,10 @@ describe('offeringCreateSchema', () => {
     expect(result.fixedMinutes).toBe(30);
   });
 
-  it('accepts VARIABLE offering with minutesPer25c', () => {
+  it('accepts TIMED offering with minutesPer25c', () => {
     const result = offeringCreateSchema.parse({
       name: 'Air Compressor',
-      type: 'VARIABLE',
+      type: 'TIMED',
       priceCents: 25,
       minutesPer25c: 5,
     });
