@@ -1,4 +1,10 @@
 import { ethers } from "ethers";
+import {
+  signedSuccessResponse,
+  verifySignedResponseSignature,
+  type EthSignedMessage,
+  type SignedApiResponse,
+} from "@sudobility/tapayoka_types";
 import { getRequiredEnv } from "../lib/env-helper.ts";
 
 let serverWallet: ethers.Wallet | null = null;
@@ -44,4 +50,26 @@ export function verifySignature(
     console.log("[crypto] verifySignature error:", e);
     return false;
   }
+}
+
+/**
+ * Sign a response data object with the server's ETH key.
+ * Returns a SignedApiResponse with the signing field populated.
+ */
+export async function signResponseData<T>(
+  data: T
+): Promise<SignedApiResponse<T>> {
+  const wallet = getServerWallet();
+  return signedSuccessResponse(
+    data,
+    wallet.address,
+    (msg) => wallet.signMessage(msg)
+  );
+}
+
+/**
+ * Verify a signed response's signature using ethers.
+ */
+export function verifyResponseSignature(signing: EthSignedMessage): boolean {
+  return verifySignedResponseSignature(signing, verifySignature);
 }
