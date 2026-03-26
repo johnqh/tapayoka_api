@@ -4,6 +4,7 @@ import { eq, desc, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   orders,
+  authorizations,
   vendorInstallations,
   vendorOfferings,
   vendorInstallationSlots,
@@ -14,10 +15,88 @@ import {
   uuidSchema,
 } from "../../schemas/index.ts";
 import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
-import { successResponse, errorResponse, type PricingTier } from "@sudobility/tapayoka_types";
+import { signPayload, getServerAddress } from "../../services/crypto.ts";
+import {
+  successResponse,
+  piSuccessResponse,
+  errorResponse,
+  type PricingTier,
+  type AuthorizationPayload,
+  type OfferingType,
+  type PiCommand,
+} from "@sudobility/tapayoka_types";
+import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
+
+/** Resolve the offering type for a given order */
+async function resolveOfferingType(
+  db: ReturnType<typeof getDb>,
+  order: { pricingTierId: string | null; deviceWalletAddress: string },
+): Promise<OfferingType> {
+  if (order.pricingTierId) {
+    const [installation] = await db
+      .select()
+      .from(vendorInstallations)
+      .where(eq(vendorInstallations.walletAddress, order.deviceWalletAddress))
+      .limit(1);
+    if (installation) {
+      const [offering] = await db
+        .select()
+        .from(vendorOfferings)
+        .where(eq(vendorOfferings.id, installation.vendorOfferingId))
+        .limit(1);
+      if (offering) {
+        const tiers = offering.pricingTiers as PricingTier[];
+        const tier = tiers.find(t => t.id === order.pricingTierId);
+        if (tier) return tier.type === "fixed" ? "FIXED" : "TIMED";
+      }
+    }
+  }
+  return "TRIGGER";
+}
+
+/** Create an authorization for an order and return a PiCommand ready to relay */
+async function createAuthorizationForOrder(
+  db: ReturnType<typeof getDb>,
+  order: { id: string; pricingTierId: string | null; deviceWalletAddress: string; authorizedSeconds: number },
+): Promise<PiCommand> {
+  const offeringType = await resolveOfferingType(db, order);
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  const payload: AuthorizationPayload = {
+    orderId: order.id,
+    offeringType,
+    seconds: order.authorizedSeconds,
+    nonce: randomUUID(),
+    exp: Math.floor(expiresAt.getTime() / 1000),
+  };
+
+  const payloadJson = JSON.stringify(payload);
+  const serverSignature = await signPayload(payloadJson);
+
+  await db.insert(authorizations).values({
+    orderId: order.id,
+    payloadJson,
+    serverSignature,
+    expiresAt,
+  });
+
+  await db
+    .update(orders)
+    .set({ status: "AUTHORIZED", updatedAt: new Date() })
+    .where(eq(orders.id, order.id));
+
+  return {
+    command: "EXECUTE",
+    data: payload as unknown as Record<string, unknown>,
+    signing: {
+      walletAddress: getServerAddress(),
+      message: payloadJson,
+      signature: serverSignature,
+    },
+  };
+}
 
 /** Calculate authorized seconds from a PricingTier */
 function calculateAuthorizedSeconds(
@@ -239,7 +318,7 @@ buyerOrders.post(
       const confirmed = await confirmPayment(paymentIntent.id, paymentMethodId);
 
       if (confirmed.status === "succeeded") {
-        const [updated] = await db
+        const [paidOrder] = await db
           .update(orders)
           .set({
             status: "PAID",
@@ -249,7 +328,10 @@ buyerOrders.post(
           .where(eq(orders.id, orderId))
           .returning();
 
-        return c.json(successResponse(updated));
+        // Create authorization and build PiCommand for the device
+        const piCommand = await createAuthorizationForOrder(db, paidOrder);
+
+        return c.json(piSuccessResponse(paidOrder, piCommand));
       } else {
         return c.json(
           errorResponse(`Payment status: ${confirmed.status}`),

@@ -4,13 +4,14 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { authorizations, orders, offerings, vendorInstallations, vendorOfferings } from "../../db/schema.ts";
 import { createAuthorizationSchema, uuidSchema } from "../../schemas/index.ts";
-import { signPayload } from "../../services/crypto.ts";
+import { signPayload, getServerAddress } from "../../services/crypto.ts";
 import {
-  successResponse,
+  piSuccessResponse,
   errorResponse,
   type AuthorizationPayload,
   type OfferingType,
   type PricingTier,
+  type PiCommand,
 } from "@sudobility/tapayoka_types";
 import { randomUUID } from "crypto";
 
@@ -135,12 +136,22 @@ buyerAuthorizations.post(
       .set({ status: "AUTHORIZED", updatedAt: new Date() })
       .where(eq(orders.id, orderId));
 
+    // Build PiCommand for the device
+    const pi: PiCommand = {
+      command: "EXECUTE",
+      data: payload as unknown as Record<string, unknown>,
+      signing: {
+        walletAddress: getServerAddress(),
+        message: payloadJson,
+        signature: serverSignature,
+      },
+    };
+
     return c.json(
-      successResponse({
-        authorization,
-        payload,
-        serverSignature,
-      }),
+      piSuccessResponse(
+        { id: authorization.id, orderId: authorization.orderId, expiresAt: authorization.expiresAt },
+        pi,
+      ),
       201,
     );
   },
@@ -167,12 +178,22 @@ buyerAuthorizations.get("/:orderId", async c => {
     return c.json(errorResponse("Authorization not found"), 404);
   }
 
+  // Build PiCommand for the device
+  const pi: PiCommand = {
+    command: "EXECUTE",
+    data: JSON.parse(authorization.payloadJson),
+    signing: {
+      walletAddress: getServerAddress(),
+      message: authorization.payloadJson,
+      signature: authorization.serverSignature,
+    },
+  };
+
   return c.json(
-    successResponse({
-      authorization,
-      payload: JSON.parse(authorization.payloadJson),
-      serverSignature: authorization.serverSignature,
-    }),
+    piSuccessResponse(
+      { id: authorization.id, orderId: authorization.orderId, expiresAt: authorization.expiresAt },
+      pi,
+    ),
   );
 });
 
