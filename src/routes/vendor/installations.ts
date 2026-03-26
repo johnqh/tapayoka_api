@@ -18,7 +18,7 @@ import {
 import {
   successResponse,
   errorResponse,
-  verifySignedResponseData,
+  verifySignedData,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -108,27 +108,21 @@ installations.post(
     const entitySlug = c.req.param("entitySlug");
     const userId = c.get("firebaseUid");
 
-    // Verify device signing
-    const dataValid = verifySignedResponseData({
-      success: true,
-      data: body.data,
-      timestamp: "",
-      signing: body.signing,
-    });
-    if (!dataValid) {
+    // Verify device proof (data integrity + signature)
+    if (!verifySignedData(body.deviceProof)) {
       return c.json(errorResponse("Device signing data mismatch"), 400);
     }
 
-    if (!verifyResponseSignature(body.signing)) {
+    if (!verifyResponseSignature(body.deviceProof.signing)) {
       return c.json(errorResponse("Invalid device signature"), 401);
     }
 
     // Verify walletAddress in data matches signing walletAddress
-    if (body.data.walletAddress !== body.signing.walletAddress) {
+    if (body.deviceProof.data.walletAddress !== body.deviceProof.signing.walletAddress) {
       return c.json(errorResponse("Wallet address mismatch"), 400);
     }
 
-    const walletAddress = body.data.walletAddress;
+    const walletAddress = body.deviceProof.data.walletAddress;
 
     const result = await getEntityWithPermission(entitySlug, userId, true);
     if (result.error !== undefined) {

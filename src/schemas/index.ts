@@ -143,10 +143,12 @@ const ethSignedMessageSchema = z.object({
 });
 
 export const vendorInstallationCreateSchema = z.object({
-  data: z.object({
-    walletAddress: ethAddressSchema,
+  deviceProof: z.object({
+    data: z.object({
+      walletAddress: ethAddressSchema,
+    }),
+    signing: ethSignedMessageSchema,
   }),
-  signing: ethSignedMessageSchema,
   vendorOfferingId: uuidSchema,
   label: z.string().min(1).max(255),
   connectionString: z.string().max(500).optional(),
