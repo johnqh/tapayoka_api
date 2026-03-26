@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, ne, and } from "drizzle-orm";
+import { eq, ne, and, sql } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorModels,
   vendorOfferings,
   vendorLocations,
+  vendorInstallations,
 } from "../../db/schema.ts";
 import {
   vendorModelCreateSchema,
@@ -39,10 +40,21 @@ models.get("/", async c => {
 
   const db = getDb();
   const results = await db
-    .select()
+    .select({
+      model: vendorModels,
+      offeringCount: sql<number>`count(${vendorOfferings.id})::int`,
+    })
     .from(vendorModels)
-    .where(and(eq(vendorModels.entityId, result.entity.id), ne(vendorModels.status, "Deleted")));
-  return c.json(successResponse(results));
+    .leftJoin(
+      vendorOfferings,
+      and(
+        eq(vendorOfferings.vendorModelId, vendorModels.id),
+        ne(vendorOfferings.status, "Deleted")
+      )
+    )
+    .where(and(eq(vendorModels.entityId, result.entity.id), ne(vendorModels.status, "Deleted")))
+    .groupBy(vendorModels.id);
+  return c.json(successResponse(results.map(r => ({ ...r.model, offeringCount: r.offeringCount }))));
 });
 
 /** GET /:id - Get a single model */
@@ -205,17 +217,26 @@ models.get("/:id/offerings", async c => {
     .select({
       offering: vendorOfferings,
       locationName: vendorLocations.name,
+      installationCount: sql<number>`count(${vendorInstallations.walletAddress})::int`,
     })
     .from(vendorOfferings)
     .innerJoin(
       vendorLocations,
       eq(vendorOfferings.vendorLocationId, vendorLocations.id)
     )
-    .where(eq(vendorOfferings.vendorModelId, id));
+    .leftJoin(
+      vendorInstallations,
+      and(
+        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id),
+        ne(vendorInstallations.status, "Deleted")
+      )
+    )
+    .where(and(eq(vendorOfferings.vendorModelId, id), ne(vendorOfferings.status, "Deleted")))
+    .groupBy(vendorOfferings.id, vendorLocations.name);
 
   return c.json(
     successResponse(
-      results.map(r => ({ ...r.offering, locationName: r.locationName }))
+      results.map(r => ({ ...r.offering, locationName: r.locationName, installationCount: r.installationCount }))
     )
   );
 });
