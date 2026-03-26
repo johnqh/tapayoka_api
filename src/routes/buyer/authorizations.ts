@@ -120,21 +120,21 @@ buyerAuthorizations.post(
     const serverSignature = await signPayload(payloadJson);
 
     // Store authorization
-    const [authorization] = await db
+    await db
       .insert(authorizations)
       .values({
         orderId,
         payloadJson,
         serverSignature,
         expiresAt,
-      })
-      .returning();
+      });
 
     // Update order status to AUTHORIZED
-    await db
+    const [updatedOrder] = await db
       .update(orders)
       .set({ status: "AUTHORIZED", updatedAt: new Date() })
-      .where(eq(orders.id, orderId));
+      .where(eq(orders.id, orderId))
+      .returning();
 
     // Build PiCommand for the device
     const pi: PiCommand = {
@@ -147,13 +147,7 @@ buyerAuthorizations.post(
       },
     };
 
-    return c.json(
-      piSuccessResponse(
-        { id: authorization.id, orderId: authorization.orderId, expiresAt: authorization.expiresAt },
-        pi,
-      ),
-      201,
-    );
+    return c.json(piSuccessResponse(updatedOrder, pi), 201);
   },
 );
 
@@ -178,6 +172,16 @@ buyerAuthorizations.get("/:orderId", async c => {
     return c.json(errorResponse("Authorization not found"), 404);
   }
 
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+
+  if (!order) {
+    return c.json(errorResponse("Order not found"), 404);
+  }
+
   // Build PiCommand for the device
   const pi: PiCommand = {
     command: "EXECUTE",
@@ -189,12 +193,7 @@ buyerAuthorizations.get("/:orderId", async c => {
     },
   };
 
-  return c.json(
-    piSuccessResponse(
-      { id: authorization.id, orderId: authorization.orderId, expiresAt: authorization.expiresAt },
-      pi,
-    ),
-  );
+  return c.json(piSuccessResponse(order, pi));
 });
 
 export default buyerAuthorizations;

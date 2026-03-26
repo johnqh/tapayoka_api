@@ -58,7 +58,7 @@ export function verifySignature(
  * Sign a response data object with the server's ETH key.
  * Returns ApiResponse<SignedData<T>>.
  */
-export async function signResponseData<T>(
+export async function signResponseData<T extends object>(
   data: T
 ): Promise<BaseResponse<SignedData<T>>> {
   const wallet = getServerWallet();
@@ -72,7 +72,7 @@ export async function signResponseData<T>(
 /**
  * Verify a SignedData envelope: data integrity + signature.
  */
-export function verifySignedDataFull<T>(signed: SignedData<T>): boolean {
+export function verifySignedDataFull<T extends object>(signed: SignedData<T>): boolean {
   return (
     verifySignedData(signed) &&
     verifySignedDataSignature(signed.signing, verifySignature)
