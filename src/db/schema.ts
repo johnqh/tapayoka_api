@@ -340,6 +340,7 @@ export const vendorInstallations = tapayoka.table(
       .notNull()
       .references(() => vendorOfferings.id),
     label: varchar("label", { length: 255 }).notNull(),
+    connectionString: text("connection_string"),
     status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

@@ -18,12 +18,14 @@ import {
 import {
   successResponse,
   errorResponse,
+  verifySignedResponseData,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
   getEntityWithPermission,
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
+import { signResponseData, verifyResponseSignature } from "../../services/crypto.ts";
 
 const installations = new Hono<AppEnv>();
 
@@ -80,6 +82,7 @@ installations.get("/service/:serviceId", async c => {
       walletAddress: vendorInstallations.walletAddress,
       vendorOfferingId: vendorInstallations.vendorOfferingId,
       label: vendorInstallations.label,
+      connectionString: vendorInstallations.connectionString,
       status: vendorInstallations.status,
       createdAt: vendorInstallations.createdAt,
       updatedAt: vendorInstallations.updatedAt,
@@ -101,9 +104,31 @@ installations.post(
   "/",
   zValidator("json", vendorInstallationCreateSchema),
   async c => {
-    const data = c.req.valid("json");
+    const body = c.req.valid("json");
     const entitySlug = c.req.param("entitySlug");
     const userId = c.get("firebaseUid");
+
+    // Verify device signing
+    const dataValid = verifySignedResponseData({
+      success: true,
+      data: body.data,
+      timestamp: "",
+      signing: body.signing,
+    });
+    if (!dataValid) {
+      return c.json(errorResponse("Device signing data mismatch"), 400);
+    }
+
+    if (!verifyResponseSignature(body.signing)) {
+      return c.json(errorResponse("Invalid device signature"), 401);
+    }
+
+    // Verify walletAddress in data matches signing walletAddress
+    if (body.data.walletAddress !== body.signing.walletAddress) {
+      return c.json(errorResponse("Wallet address mismatch"), 400);
+    }
+
+    const walletAddress = body.data.walletAddress;
 
     const result = await getEntityWithPermission(entitySlug, userId, true);
     if (result.error !== undefined) {
@@ -116,7 +141,7 @@ installations.post(
     const db = getDb();
     const owned = await verifyOfferingOwnership(
       db,
-      data.vendorOfferingId,
+      body.vendorOfferingId,
       result.entity.id
     );
     if (!owned) {
@@ -127,7 +152,7 @@ installations.post(
     const [existing] = await db
       .select()
       .from(vendorInstallations)
-      .where(eq(vendorInstallations.walletAddress, data.walletAddress))
+      .where(eq(vendorInstallations.walletAddress, walletAddress))
       .limit(1);
 
     if (existing && existing.status !== "Deleted") {
@@ -137,19 +162,26 @@ installations.post(
       );
     }
 
+    const installationData = {
+      walletAddress,
+      vendorOfferingId: body.vendorOfferingId,
+      label: body.label,
+      connectionString: body.connectionString ?? null,
+    };
+
     let installation;
     if (existing) {
       // Reactivate soft-deleted installation
       const [reactivated] = await db
         .update(vendorInstallations)
-        .set({ ...data, status: "Active" as const, updatedAt: new Date() })
-        .where(eq(vendorInstallations.walletAddress, data.walletAddress))
+        .set({ ...installationData, status: "Active" as const, updatedAt: new Date() })
+        .where(eq(vendorInstallations.walletAddress, walletAddress))
         .returning();
       installation = reactivated;
     } else {
       const [created] = await db
         .insert(vendorInstallations)
-        .values(data)
+        .values(installationData)
         .returning();
       installation = created;
     }
@@ -159,7 +191,7 @@ installations.post(
       .select({ modelSlot: vendorModels.slot })
       .from(vendorOfferings)
       .innerJoin(vendorModels, eq(vendorOfferings.vendorModelId, vendorModels.id))
-      .where(eq(vendorOfferings.id, data.vendorOfferingId))
+      .where(eq(vendorOfferings.id, body.vendorOfferingId))
       .limit(1);
 
     if (offering && (offering.modelSlot === "single" || offering.modelSlot === null)) {
@@ -168,8 +200,8 @@ installations.post(
         .select()
         .from(vendorInstallationSlots)
         .where(and(
-          eq(vendorInstallationSlots.installationWalletAddress, data.walletAddress),
-          eq(vendorInstallationSlots.label, data.label),
+          eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
+          eq(vendorInstallationSlots.label, body.label),
         ))
         .limit(1);
 
@@ -182,14 +214,14 @@ installations.post(
         await db
           .insert(vendorInstallationSlots)
           .values({
-            installationWalletAddress: data.walletAddress,
-            label: data.label,
+            installationWalletAddress: walletAddress,
+            label: body.label,
             sortOrder: 0,
           });
       }
     }
 
-    return c.json(successResponse(installation), 201);
+    return c.json(await signResponseData(installation), 201);
   }
 );
 

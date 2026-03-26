@@ -136,10 +136,20 @@ export const vendorOfferingUpdateSchema = z.object({
   schedule: z.array(dailyScheduleSchema).nullable().optional(),
 });
 
-export const vendorInstallationCreateSchema = z.object({
+const ethSignedMessageSchema = z.object({
   walletAddress: ethAddressSchema,
+  message: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+export const vendorInstallationCreateSchema = z.object({
+  data: z.object({
+    walletAddress: ethAddressSchema,
+  }),
+  signing: ethSignedMessageSchema,
   vendorOfferingId: uuidSchema,
   label: z.string().min(1).max(255),
+  connectionString: z.string().max(500).optional(),
 });
 
 export const vendorInstallationUpdateSchema = z.object({

@@ -18,6 +18,26 @@ const app = new Hono();
 app.use("*", logger());
 app.use("*", cors());
 
+// Request/response body logging
+app.use("/api/*", async (c, next) => {
+  if (c.req.method === "POST" || c.req.method === "PUT") {
+    const body = await c.req.json().catch(() => null);
+    if (body) {
+      console.log(`[API →] ${c.req.method} ${c.req.path}`, JSON.stringify(body));
+      // Re-inject body so downstream handlers can read it
+      c.req.raw = new Request(c.req.raw, { body: JSON.stringify(body) });
+    }
+  }
+  await next();
+  const contentType = c.res.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const resBody = await c.res.clone().json().catch(() => null);
+    if (resBody) {
+      console.log(`[API ←] ${c.req.method} ${c.req.path}`, JSON.stringify(resBody));
+    }
+  }
+});
+
 // Health check
 app.get("/", c => {
   return c.json(
