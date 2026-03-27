@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, ne } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   vendorInstallations,
@@ -25,7 +25,7 @@ import {
   getEntityWithPermission,
   getPermissionErrorStatus,
 } from "../../lib/entity-helpers.ts";
-import { signResponseData, verifyResponseSignature } from "../../services/crypto.ts";
+import { verifyResponseSignature } from "../../services/crypto.ts";
 
 const installations = new Hono<AppEnv>();
 
@@ -93,7 +93,10 @@ installations.get("/service/:serviceId", async c => {
       vendorInstallationSlots,
       eq(vendorInstallations.walletAddress, vendorInstallationSlots.installationWalletAddress)
     )
-    .where(eq(vendorInstallations.vendorOfferingId, serviceId))
+    .where(and(
+      eq(vendorInstallations.vendorOfferingId, serviceId),
+      ne(vendorInstallations.status, "Deleted"),
+    ))
     .groupBy(vendorInstallations.walletAddress);
 
   return c.json(successResponse(results));
@@ -109,7 +112,8 @@ installations.post(
     const userId = c.get("firebaseUid");
 
     // Verify device proof (data integrity + signature)
-    if (!verifySignedData(body.deviceProof)) {
+    // Allow 5 minutes for the user to fill the installation form after scanning
+    if (!verifySignedData(body.deviceProof, 5 * 60 * 1000)) {
       return c.json(errorResponse("Device signing data mismatch"), 400);
     }
 
@@ -215,7 +219,7 @@ installations.post(
       }
     }
 
-    return c.json(await signResponseData(installation), 201);
+    return c.json(successResponse(installation), 201);
   }
 );
 

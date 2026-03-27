@@ -146,7 +146,7 @@ export const vendorInstallationCreateSchema = z.object({
   deviceProof: z.object({
     data: z.object({
       walletAddress: ethAddressSchema,
-    }),
+    }).passthrough(),
     signing: ethSignedMessageSchema,
   }),
   vendorOfferingId: uuidSchema,

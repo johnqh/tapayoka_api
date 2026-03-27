@@ -537,6 +537,9 @@ export async function initDatabase() {
   await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier_id`);
   await connection.unsafe(`ALTER TABLE tapayoka.vendor_installations DROP COLUMN IF EXISTS pricing_tier`);
 
+  // Add connection_string to vendor_installations
+  await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS connection_string TEXT`;
+
   // Rename vendor_model_pricing 'timed' → 'variable'
   await connection.unsafe(`
     DO $$ BEGIN
