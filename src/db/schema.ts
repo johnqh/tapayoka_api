@@ -70,10 +70,10 @@ export const vendorModelActionEnum = tapayoka.enum("vendor_model_action", [
   "sequence",
 ]);
 
-export const vendorModelInterruptionEnum = tapayoka.enum("vendor_model_interruption", [
-  "stop",
-  "continue",
-]);
+export const vendorModelInterruptionEnum = tapayoka.enum(
+  "vendor_model_interruption",
+  ["stop", "continue"]
+);
 
 export const vendorModelPaymentEnum = tapayoka.enum("vendor_model_payment", [
   "atStart",
@@ -86,12 +86,10 @@ export const vendorModelSlotEnum = tapayoka.enum("vendor_model_slot", [
   "multi2D",
 ]);
 
-export const vendorModelSlotPricingEnum = tapayoka.enum("vendor_model_slot_pricing", [
-  "Same",
-  "Different",
-  "Tiered",
-  "Unique",
-]);
+export const vendorModelSlotPricingEnum = tapayoka.enum(
+  "vendor_model_slot_pricing",
+  ["Same", "Different", "Tiered", "Unique"]
+);
 
 export const vendorEntityStatusEnum = tapayoka.enum("vendor_entity_status", [
   "Active",
@@ -105,7 +103,10 @@ export const vendorEntityStatusEnum = tapayoka.enum("vendor_entity_status", [
 
 export const entities = createEntitiesTable(tapayoka, "tapayoka");
 export const entityMembers = createEntityMembersTable(tapayoka, "tapayoka");
-export const entityInvitations = createEntityInvitationsTable(tapayoka, "tapayoka");
+export const entityInvitations = createEntityInvitationsTable(
+  tapayoka,
+  "tapayoka"
+);
 
 // =============================================================================
 // Tables
@@ -188,8 +189,7 @@ export const orders = tapayoka.table(
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
       .references(() => devices.walletAddress),
-    offeringId: uuid("offering_id")
-      .references(() => offerings.id),
+    offeringId: uuid("offering_id").references(() => offerings.id),
     pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     buyerUid: varchar("buyer_uid", { length: 128 }),
     amountCents: integer("amount_cents").notNull(),
@@ -298,9 +298,7 @@ export const vendorModels = tapayoka.table(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  table => [
-    index("vendor_models_entity_idx").on(table.entityId),
-  ]
+  table => [index("vendor_models_entity_idx").on(table.entityId)]
 );
 
 export const vendorOfferings = tapayoka.table(
@@ -354,9 +352,13 @@ export const vendorInstallationSlots = tapayoka.table(
   "vendor_installation_slots",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    installationWalletAddress: varchar("installation_wallet_address", { length: 42 })
+    installationWalletAddress: varchar("installation_wallet_address", {
+      length: 42,
+    })
       .notNull()
-      .references(() => vendorInstallations.walletAddress, { onDelete: "cascade" }),
+      .references(() => vendorInstallations.walletAddress, {
+        onDelete: "cascade",
+      }),
     label: varchar("label", { length: 255 }).notNull(),
     row: varchar("row", { length: 50 }),
     column: varchar("column", { length: 50 }),
@@ -368,9 +370,12 @@ export const vendorInstallationSlots = tapayoka.table(
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   table => [
-    index("vendor_installation_slots_installation_idx").on(table.installationWalletAddress),
+    index("vendor_installation_slots_installation_idx").on(
+      table.installationWalletAddress
+    ),
     unique("vendor_installation_slots_installation_label_unique").on(
-      table.installationWalletAddress, table.label
+      table.installationWalletAddress,
+      table.label
     ),
   ]
 );

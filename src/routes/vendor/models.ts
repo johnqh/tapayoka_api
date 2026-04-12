@@ -16,6 +16,12 @@ import {
 import {
   successResponse,
   errorResponse,
+  type VendorModel,
+  type VendorOffering,
+  type VendorModelSlotPricing,
+  type PricingTier,
+  type DailySchedule,
+  type DeleteResult,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -52,9 +58,19 @@ models.get("/", async c => {
         ne(vendorOfferings.status, "Deleted")
       )
     )
-    .where(and(eq(vendorModels.entityId, result.entity.id), ne(vendorModels.status, "Deleted")))
+    .where(
+      and(
+        eq(vendorModels.entityId, result.entity.id),
+        ne(vendorModels.status, "Deleted")
+      )
+    )
     .groupBy(vendorModels.id);
-  return c.json(successResponse(results.map(r => ({ ...r.model, offeringCount: r.offeringCount }))));
+  const data: VendorModel[] = results.map(r => ({
+    ...r.model,
+    slotPricing: r.model.slotPricing as VendorModelSlotPricing | null,
+    offeringCount: r.offeringCount,
+  }));
+  return c.json(successResponse(data));
 });
 
 /** GET /:id - Get a single model */
@@ -87,74 +103,78 @@ models.get("/:id", async c => {
     return c.json(errorResponse("Model not found"), 404);
   }
 
-  return c.json(successResponse(model));
+  const data: VendorModel = {
+    ...model,
+    slotPricing: model.slotPricing as VendorModelSlotPricing | null,
+  };
+  return c.json(successResponse(data));
 });
 
 /** POST / - Create a new model */
-models.post(
-  "/",
-  zValidator("json", vendorModelCreateSchema),
-  async c => {
-    const data = c.req.valid("json");
-    const entitySlug = c.req.param("entitySlug");
-    const userId = c.get("firebaseUid");
+models.post("/", zValidator("json", vendorModelCreateSchema), async c => {
+  const data = c.req.valid("json");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-    const result = await getEntityWithPermission(entitySlug, userId, true);
-    if (result.error !== undefined) {
-      return c.json(
-        { ...errorResponse(result.error), errorCode: result.errorCode },
-        getPermissionErrorStatus(result.errorCode)
-      );
-    }
-
-    const db = getDb();
-    const [model] = await db
-      .insert(vendorModels)
-      .values({ ...data, entityId: result.entity.id })
-      .returning();
-
-    return c.json(successResponse(model), 201);
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
   }
-);
+
+  const db = getDb();
+  const [created] = await db
+    .insert(vendorModels)
+    .values({ ...data, entityId: result.entity.id })
+    .returning();
+
+  const model: VendorModel = {
+    ...created,
+    slotPricing: created.slotPricing as VendorModelSlotPricing | null,
+  };
+  return c.json(successResponse(model), 201);
+});
 
 /** PUT /:id - Update a model */
-models.put(
-  "/:id",
-  zValidator("json", vendorModelUpdateSchema),
-  async c => {
-    const id = c.req.param("id");
-    const data = c.req.valid("json");
-    const entitySlug = c.req.param("entitySlug");
-    const userId = c.get("firebaseUid");
+models.put("/:id", zValidator("json", vendorModelUpdateSchema), async c => {
+  const id = c.req.param("id");
+  const data = c.req.valid("json");
+  const entitySlug = c.req.param("entitySlug");
+  const userId = c.get("firebaseUid");
 
-    const result = await getEntityWithPermission(entitySlug, userId, true);
-    if (result.error !== undefined) {
-      return c.json(
-        { ...errorResponse(result.error), errorCode: result.errorCode },
-        getPermissionErrorStatus(result.errorCode)
-      );
-    }
-
-    const db = getDb();
-    const [model] = await db
-      .select()
-      .from(vendorModels)
-      .where(eq(vendorModels.id, id))
-      .limit(1);
-
-    if (!model || model.entityId !== result.entity.id) {
-      return c.json(errorResponse("Model not found"), 404);
-    }
-
-    const [updated] = await db
-      .update(vendorModels)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(vendorModels.id, id))
-      .returning();
-
-    return c.json(successResponse(updated));
+  const result = await getEntityWithPermission(entitySlug, userId, true);
+  if (result.error !== undefined) {
+    return c.json(
+      { ...errorResponse(result.error), errorCode: result.errorCode },
+      getPermissionErrorStatus(result.errorCode)
+    );
   }
-);
+
+  const db = getDb();
+  const [model] = await db
+    .select()
+    .from(vendorModels)
+    .where(eq(vendorModels.id, id))
+    .limit(1);
+
+  if (!model || model.entityId !== result.entity.id) {
+    return c.json(errorResponse("Model not found"), 404);
+  }
+
+  const [updatedRow] = await db
+    .update(vendorModels)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(vendorModels.id, id))
+    .returning();
+
+  const updated: VendorModel = {
+    ...updatedRow,
+    slotPricing: updatedRow.slotPricing as VendorModelSlotPricing | null,
+  };
+  return c.json(successResponse(updated));
+});
 
 /** DELETE /:id - Delete a model (409 if has offerings) */
 models.delete("/:id", async c => {
@@ -185,7 +205,8 @@ models.delete("/:id", async c => {
     .update(vendorModels)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorModels.id, id));
-  return c.json(successResponse({ deleted: true }));
+  const data: DeleteResult = { deleted: true };
+  return c.json(successResponse(data));
 });
 
 /** GET /:id/offerings - Get offerings for a model */
@@ -231,14 +252,22 @@ models.get("/:id/offerings", async c => {
         ne(vendorInstallations.status, "Deleted")
       )
     )
-    .where(and(eq(vendorOfferings.vendorModelId, id), ne(vendorOfferings.status, "Deleted")))
+    .where(
+      and(
+        eq(vendorOfferings.vendorModelId, id),
+        ne(vendorOfferings.status, "Deleted")
+      )
+    )
     .groupBy(vendorOfferings.id, vendorLocations.name);
 
-  return c.json(
-    successResponse(
-      results.map(r => ({ ...r.offering, locationName: r.locationName, installationCount: r.installationCount }))
-    )
-  );
+  const data: VendorOffering[] = results.map(r => ({
+    ...r.offering,
+    pricingTiers: r.offering.pricingTiers as PricingTier[],
+    schedule: r.offering.schedule as DailySchedule[] | null,
+    locationName: r.locationName,
+    installationCount: r.installationCount,
+  }));
+  return c.json(successResponse(data));
 });
 
 export default models;

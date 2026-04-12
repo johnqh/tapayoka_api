@@ -3,6 +3,7 @@ import { entityHelpers as helpers } from "../lib/entity-helpers.ts";
 import {
   successResponse,
   errorResponse,
+  type EntityInvitation,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../lib/hono-types.ts";
 
@@ -17,7 +18,8 @@ invitationsRouter.get("/mine", async c => {
   }
 
   try {
-    const invitations = await helpers.invitations.getUserPendingInvitations(userEmail);
+    const invitations: EntityInvitation[] =
+      await helpers.invitations.getUserPendingInvitations(userEmail);
     return c.json(successResponse(invitations));
   } catch (error: any) {
     console.error("Error listing user invitations:", error);
@@ -31,8 +33,8 @@ invitationsRouter.post("/:token/accept", async c => {
   const userId = c.get("firebaseUid");
 
   try {
-    const result = await helpers.invitations.acceptInvitation(token, userId);
-    return c.json(successResponse(result));
+    await helpers.invitations.acceptInvitation(token, userId);
+    return c.json(successResponse({ accepted: true }));
   } catch (error: any) {
     console.error("Error accepting invitation:", error);
     return c.json(errorResponse(error.message || "Bad request"), 400);
@@ -44,8 +46,8 @@ invitationsRouter.post("/:token/decline", async c => {
   const token = c.req.param("token");
 
   try {
-    const result = await helpers.invitations.declineInvitation(token);
-    return c.json(successResponse(result));
+    await helpers.invitations.declineInvitation(token);
+    return c.json(successResponse({ declined: true }));
   } catch (error: any) {
     console.error("Error declining invitation:", error);
     return c.json(errorResponse(error.message || "Bad request"), 400);

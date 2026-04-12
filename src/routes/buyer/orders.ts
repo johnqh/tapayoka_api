@@ -24,6 +24,7 @@ import {
   type AuthorizationPayload,
   type OfferingType,
   type PiCommand,
+  type Order,
 } from "@sudobility/tapayoka_types";
 import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";
@@ -33,7 +34,7 @@ const buyerOrders = new Hono<AppEnv>();
 /** Resolve the offering type for a given order */
 async function resolveOfferingType(
   db: ReturnType<typeof getDb>,
-  order: { pricingTierId: string | null; deviceWalletAddress: string },
+  order: { pricingTierId: string | null; deviceWalletAddress: string }
 ): Promise<OfferingType> {
   if (order.pricingTierId) {
     const [installation] = await db
@@ -60,7 +61,12 @@ async function resolveOfferingType(
 /** Create an authorization for an order and return a PiCommand ready to relay */
 async function createAuthorizationForOrder(
   db: ReturnType<typeof getDb>,
-  order: { id: string; pricingTierId: string | null; deviceWalletAddress: string; authorizedSeconds: number },
+  order: {
+    id: string;
+    pricingTierId: string | null;
+    deviceWalletAddress: string;
+    authorizedSeconds: number;
+  }
 ): Promise<PiCommand> {
   const offeringType = await resolveOfferingType(db, order);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -101,7 +107,7 @@ async function createAuthorizationForOrder(
 /** Calculate authorized seconds from a PricingTier */
 function calculateAuthorizedSeconds(
   tier: PricingTier,
-  amountCents: number,
+  amountCents: number
 ): number {
   if (tier.type === "fixed") {
     return tier.signals.reduce((sum, s) => sum + s.duration, 0);
@@ -144,7 +150,8 @@ buyerOrders.get("/", async c => {
     .orderBy(desc(orders.createdAt))
     .limit(50);
 
-  return c.json(successResponse(rows));
+  const data: Order[] = rows;
+  return c.json(successResponse(data));
 });
 
 /**
@@ -195,9 +202,9 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
   if (amountCents < minCents) {
     return c.json(
       errorResponse(
-        `Amount ${amountCents} is less than minimum price ${minCents}`,
+        `Amount ${amountCents} is less than minimum price ${minCents}`
       ),
-      400,
+      400
     );
   }
 
@@ -211,9 +218,9 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
           eq(vendorInstallationSlots.id, slotId),
           eq(
             vendorInstallationSlots.installationWalletAddress,
-            deviceWalletAddress,
-          ),
-        ),
+            deviceWalletAddress
+          )
+        )
       )
       .limit(1);
 
@@ -233,8 +240,8 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
             "PAID",
             "AUTHORIZED",
             "RUNNING",
-          ] as const),
-        ),
+          ] as const)
+        )
       )
       .limit(1);
 
@@ -258,7 +265,8 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
     })
     .returning();
 
-  return c.json(successResponse(order), 201);
+  const data: Order = order;
+  return c.json(successResponse(data), 201);
 });
 
 /**
@@ -282,7 +290,8 @@ buyerOrders.get("/:id", async c => {
     return c.json(errorResponse("Order not found"), 404);
   }
 
-  return c.json(successResponse(order));
+  const data: Order = order;
+  return c.json(successResponse(data));
 });
 
 /**
@@ -318,7 +327,7 @@ buyerOrders.post(
       const confirmed = await confirmPayment(paymentIntent.id, paymentMethodId);
 
       if (confirmed.status === "succeeded") {
-        const [paidOrder] = await db
+        const [paidRow] = await db
           .update(orders)
           .set({
             status: "PAID",
@@ -328,6 +337,8 @@ buyerOrders.post(
           .where(eq(orders.id, orderId))
           .returning();
 
+        const paidOrder: Order = paidRow;
+
         // Create authorization and build PiCommand for the device
         const piCommand = await createAuthorizationForOrder(db, paidOrder);
 
@@ -335,7 +346,7 @@ buyerOrders.post(
       } else {
         return c.json(
           errorResponse(`Payment status: ${confirmed.status}`),
-          400,
+          400
         );
       }
     } catch (error: any) {
@@ -346,10 +357,10 @@ buyerOrders.post(
 
       return c.json(
         errorResponse(error.message ?? "Payment processing failed"),
-        400,
+        400
       );
     }
-  },
+  }
 );
 
 export default buyerOrders;

@@ -35,7 +35,9 @@ function loadEnvFiles(): Record<string, string> {
   const local = parseEnvFile(resolve(cwd, ".env.local"));
   const mode = process.env.NODE_ENV;
   const modeFile = mode ? parseEnvFile(resolve(cwd, `.env.${mode}`)) : {};
-  const modeLocal = mode ? parseEnvFile(resolve(cwd, `.env.${mode}.local`)) : {};
+  const modeLocal = mode
+    ? parseEnvFile(resolve(cwd, `.env.${mode}.local`))
+    : {};
   // Priority: .env.{mode}.local > .env.{mode} > .env.local > .env
   envCache = { ...base, ...local, ...modeFile, ...modeLocal };
 

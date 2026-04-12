@@ -13,7 +13,10 @@ import type { AppEnv } from "../lib/hono-types.ts";
 export async function firebaseAuth(c: Context<AppEnv>, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ success: false, error: "Missing authorization token" }, 401);
+    return c.json(
+      { success: false, error: "Missing authorization token" },
+      401
+    );
   }
 
   const token = authHeader.slice(7);

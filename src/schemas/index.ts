@@ -60,7 +60,15 @@ export const vendorLocationUpdateSchema = z.object({
 });
 
 const dailyScheduleSchema = z.object({
-  dayOfWeek: z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]),
+  dayOfWeek: z.enum([
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ]),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
 });
@@ -144,9 +152,11 @@ const ethSignedMessageSchema = z.object({
 
 export const vendorInstallationCreateSchema = z.object({
   deviceProof: z.object({
-    data: z.object({
-      walletAddress: ethAddressSchema,
-    }).passthrough(),
+    data: z
+      .object({
+        walletAddress: ethAddressSchema,
+      })
+      .passthrough(),
     signing: ethSignedMessageSchema,
   }),
   vendorOfferingId: uuidSchema,

@@ -15,6 +15,10 @@ import {
 import {
   successResponse,
   errorResponse,
+  type VendorOffering,
+  type PricingTier,
+  type DailySchedule,
+  type DeleteResult,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -65,7 +69,12 @@ vendorOfferingsRoute.get("/:id", async c => {
     return c.json(errorResponse("Offering not found"), 404);
   }
 
-  return c.json(successResponse(instResult.offering));
+  const data: VendorOffering = {
+    ...instResult.offering,
+    pricingTiers: instResult.offering.pricingTiers as PricingTier[],
+    schedule: instResult.offering.schedule as DailySchedule[] | null,
+  };
+  return c.json(successResponse(data));
 });
 
 /** POST / - Create a new vendor offering */
@@ -157,7 +166,12 @@ vendorOfferingsRoute.post(
       offering = created;
     }
 
-    return c.json(successResponse(offering), 201);
+    const responseData: VendorOffering = {
+      ...offering,
+      pricingTiers: offering.pricingTiers as PricingTier[],
+      schedule: offering.schedule as DailySchedule[] | null,
+    };
+    return c.json(successResponse(responseData), 201);
   }
 );
 
@@ -201,12 +215,17 @@ vendorOfferingsRoute.put(
       return c.json(errorResponse("Offering not found"), 404);
     }
 
-    const [updated] = await db
+    const [updatedRow] = await db
       .update(vendorOfferings)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(vendorOfferings.id, id))
       .returning();
 
+    const updated: VendorOffering = {
+      ...updatedRow,
+      pricingTiers: updatedRow.pricingTiers as PricingTier[],
+      schedule: updatedRow.schedule as DailySchedule[] | null,
+    };
     return c.json(successResponse(updated));
   }
 );
@@ -251,7 +270,8 @@ vendorOfferingsRoute.delete("/:id", async c => {
     .update(vendorOfferings)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorOfferings.id, id));
-  return c.json(successResponse({ deleted: true }));
+  const data: DeleteResult = { deleted: true };
+  return c.json(successResponse(data));
 });
 
 export default vendorOfferingsRoute;

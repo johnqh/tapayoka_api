@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { authorizations, orders, offerings, vendorInstallations, vendorOfferings } from "../../db/schema.ts";
+import {
+  authorizations,
+  orders,
+  offerings,
+  vendorInstallations,
+  vendorOfferings,
+} from "../../db/schema.ts";
 import { createAuthorizationSchema, uuidSchema } from "../../schemas/index.ts";
 import { signPayload, getServerAddress } from "../../services/crypto.ts";
 import {
@@ -12,6 +18,7 @@ import {
   type OfferingType,
   type PricingTier,
   type PiCommand,
+  type Order,
 } from "@sudobility/tapayoka_types";
 import { randomUUID } from "crypto";
 
@@ -20,7 +27,11 @@ const buyerAuthorizations = new Hono();
 /** Resolve offering type for the authorization payload */
 async function resolveOfferingType(
   db: ReturnType<typeof getDb>,
-  order: { offeringId: string | null; pricingTierId: string | null; deviceWalletAddress: string },
+  order: {
+    offeringId: string | null;
+    pricingTierId: string | null;
+    deviceWalletAddress: string;
+  }
 ): Promise<OfferingType> {
   // New flow: resolve from pricing tier
   if (order.pricingTierId) {
@@ -89,7 +100,7 @@ buyerAuthorizations.post(
     if (order.status !== "PAID") {
       return c.json(
         errorResponse("Order must be in PAID status to authorize"),
-        400,
+        400
       );
     }
 
@@ -120,21 +131,21 @@ buyerAuthorizations.post(
     const serverSignature = await signPayload(payloadJson);
 
     // Store authorization
-    await db
-      .insert(authorizations)
-      .values({
-        orderId,
-        payloadJson,
-        serverSignature,
-        expiresAt,
-      });
+    await db.insert(authorizations).values({
+      orderId,
+      payloadJson,
+      serverSignature,
+      expiresAt,
+    });
 
     // Update order status to AUTHORIZED
-    const [updatedOrder] = await db
+    const [updatedRow] = await db
       .update(orders)
       .set({ status: "AUTHORIZED", updatedAt: new Date() })
       .where(eq(orders.id, orderId))
       .returning();
+
+    const updatedOrder: Order = updatedRow;
 
     // Build PiCommand for the device
     const pi: PiCommand = {
@@ -148,7 +159,7 @@ buyerAuthorizations.post(
     };
 
     return c.json(piSuccessResponse(updatedOrder, pi), 201);
-  },
+  }
 );
 
 /**
@@ -172,15 +183,17 @@ buyerAuthorizations.get("/:orderId", async c => {
     return c.json(errorResponse("Authorization not found"), 404);
   }
 
-  const [order] = await db
+  const [orderRow] = await db
     .select()
     .from(orders)
     .where(eq(orders.id, orderId))
     .limit(1);
 
-  if (!order) {
+  if (!orderRow) {
     return c.json(errorResponse("Order not found"), 404);
   }
+
+  const order: Order = orderRow;
 
   // Build PiCommand for the device
   const pi: PiCommand = {

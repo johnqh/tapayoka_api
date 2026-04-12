@@ -6,6 +6,7 @@ import { ethAddressSchema } from "../../schemas/index.ts";
 import {
   successResponse,
   errorResponse,
+  type QrCodeResponse,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -50,13 +51,13 @@ vendorQr.get("/:walletAddress", async c => {
     return c.json(errorResponse("Device not found"), 404);
   }
 
-  return c.json(
-    successResponse({
-      deviceWalletAddress: walletAddress,
-      qrData: walletAddress,
-      format: "svg" as const,
-    })
-  );
+  const qrResponse: QrCodeResponse = {
+    deviceWalletAddress: walletAddress,
+    qrData: walletAddress,
+    format: "svg",
+  };
+
+  return c.json(successResponse(qrResponse));
 });
 
 export default vendorQr;

@@ -19,6 +19,8 @@ import {
   successResponse,
   errorResponse,
   verifySignedData,
+  type VendorInstallation,
+  type DeleteResult,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -91,15 +93,21 @@ installations.get("/service/:serviceId", async c => {
     .from(vendorInstallations)
     .leftJoin(
       vendorInstallationSlots,
-      eq(vendorInstallations.walletAddress, vendorInstallationSlots.installationWalletAddress)
+      eq(
+        vendorInstallations.walletAddress,
+        vendorInstallationSlots.installationWalletAddress
+      )
     )
-    .where(and(
-      eq(vendorInstallations.vendorOfferingId, serviceId),
-      ne(vendorInstallations.status, "Deleted"),
-    ))
+    .where(
+      and(
+        eq(vendorInstallations.vendorOfferingId, serviceId),
+        ne(vendorInstallations.status, "Deleted")
+      )
+    )
     .groupBy(vendorInstallations.walletAddress);
 
-  return c.json(successResponse(results));
+  const data: VendorInstallation[] = results;
+  return c.json(successResponse(data));
 });
 
 /** POST / - Create a new installation */
@@ -122,7 +130,10 @@ installations.post(
     }
 
     // Verify walletAddress in data matches signing walletAddress
-    if (body.deviceProof.data.walletAddress !== body.deviceProof.signing.walletAddress) {
+    if (
+      body.deviceProof.data.walletAddress !==
+      body.deviceProof.signing.walletAddress
+    ) {
       return c.json(errorResponse("Wallet address mismatch"), 400);
     }
 
@@ -172,7 +183,11 @@ installations.post(
       // Reactivate soft-deleted installation
       const [reactivated] = await db
         .update(vendorInstallations)
-        .set({ ...installationData, status: "Active" as const, updatedAt: new Date() })
+        .set({
+          ...installationData,
+          status: "Active" as const,
+          updatedAt: new Date(),
+        })
         .where(eq(vendorInstallations.walletAddress, walletAddress))
         .returning();
       installation = reactivated;
@@ -188,19 +203,30 @@ installations.post(
     const [offering] = await db
       .select({ modelSlot: vendorModels.slot })
       .from(vendorOfferings)
-      .innerJoin(vendorModels, eq(vendorOfferings.vendorModelId, vendorModels.id))
+      .innerJoin(
+        vendorModels,
+        eq(vendorOfferings.vendorModelId, vendorModels.id)
+      )
       .where(eq(vendorOfferings.id, body.vendorOfferingId))
       .limit(1);
 
-    if (offering && (offering.modelSlot === "single" || offering.modelSlot === null)) {
+    if (
+      offering &&
+      (offering.modelSlot === "single" || offering.modelSlot === null)
+    ) {
       // Reactivate soft-deleted slot or create new one
       const [existingSlot] = await db
         .select()
         .from(vendorInstallationSlots)
-        .where(and(
-          eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
-          eq(vendorInstallationSlots.label, body.label),
-        ))
+        .where(
+          and(
+            eq(
+              vendorInstallationSlots.installationWalletAddress,
+              walletAddress
+            ),
+            eq(vendorInstallationSlots.label, body.label)
+          )
+        )
         .limit(1);
 
       if (existingSlot) {
@@ -209,17 +235,16 @@ installations.post(
           .set({ status: "Active" as const, updatedAt: new Date() })
           .where(eq(vendorInstallationSlots.id, existingSlot.id));
       } else {
-        await db
-          .insert(vendorInstallationSlots)
-          .values({
-            installationWalletAddress: walletAddress,
-            label: body.label,
-            sortOrder: 0,
-          });
+        await db.insert(vendorInstallationSlots).values({
+          installationWalletAddress: walletAddress,
+          label: body.label,
+          sortOrder: 0,
+        });
       }
     }
 
-    return c.json(successResponse(installation), 201);
+    const data: VendorInstallation = installation;
+    return c.json(successResponse(data), 201);
   }
 );
 
@@ -280,12 +305,13 @@ installations.put(
       }
     }
 
-    const [updated] = await db
+    const [updatedRow] = await db
       .update(vendorInstallations)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(vendorInstallations.walletAddress, walletAddress))
       .returning();
 
+    const updated: VendorInstallation = updatedRow;
     return c.json(successResponse(updated));
   }
 );
@@ -328,7 +354,8 @@ installations.delete("/:walletAddress", async c => {
     .update(vendorInstallations)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorInstallations.walletAddress, walletAddress));
-  return c.json(successResponse({ deleted: true }));
+  const data: DeleteResult = { deleted: true };
+  return c.json(successResponse(data));
 });
 
 export default installations;

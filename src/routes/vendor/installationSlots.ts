@@ -18,6 +18,9 @@ import {
 import {
   successResponse,
   errorResponse,
+  type VendorInstallationSlot,
+  type PricingTier,
+  type DeleteResult,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
@@ -74,7 +77,11 @@ installationSlots.get("/installation/:walletAddress", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyInstallationOwnership(db, walletAddress, result.entity.id);
+  const owned = await verifyInstallationOwnership(
+    db,
+    walletAddress,
+    result.entity.id
+  );
   if (!owned) {
     return c.json(errorResponse("Installation not found"), 404);
   }
@@ -85,7 +92,11 @@ installationSlots.get("/installation/:walletAddress", async c => {
     .where(eq(vendorInstallationSlots.installationWalletAddress, walletAddress))
     .orderBy(vendorInstallationSlots.sortOrder);
 
-  return c.json(successResponse(results));
+  const data: VendorInstallationSlot[] = results.map(r => ({
+    ...r,
+    pricingTier: r.pricingTier as PricingTier | null,
+  }));
+  return c.json(successResponse(data));
 });
 
 /** POST /installation/:walletAddress - Create a single slot */
@@ -112,7 +123,11 @@ installationSlots.post(
     }
 
     const db = getDb();
-    const owned = await verifyInstallationOwnership(db, walletAddress, result.entity.id);
+    const owned = await verifyInstallationOwnership(
+      db,
+      walletAddress,
+      result.entity.id
+    );
     if (!owned) {
       return c.json(errorResponse("Installation not found"), 404);
     }
@@ -121,22 +136,32 @@ installationSlots.post(
     const [existingSlot] = await db
       .select()
       .from(vendorInstallationSlots)
-      .where(and(
-        eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
-        eq(vendorInstallationSlots.label, data.label),
-      ))
+      .where(
+        and(
+          eq(vendorInstallationSlots.installationWalletAddress, walletAddress),
+          eq(vendorInstallationSlots.label, data.label)
+        )
+      )
       .limit(1);
 
     let slot;
     if (existingSlot && existingSlot.status === "Deleted") {
       const [reactivated] = await db
         .update(vendorInstallationSlots)
-        .set({ ...data, installationWalletAddress: walletAddress, status: "Active" as const, updatedAt: new Date() })
+        .set({
+          ...data,
+          installationWalletAddress: walletAddress,
+          status: "Active" as const,
+          updatedAt: new Date(),
+        })
         .where(eq(vendorInstallationSlots.id, existingSlot.id))
         .returning();
       slot = reactivated;
     } else if (existingSlot) {
-      return c.json(errorResponse("A slot with this label already exists"), 409);
+      return c.json(
+        errorResponse("A slot with this label already exists"),
+        409
+      );
     } else {
       const [created] = await db
         .insert(vendorInstallationSlots)
@@ -148,7 +173,11 @@ installationSlots.post(
       slot = created;
     }
 
-    return c.json(successResponse(slot), 201);
+    const responseData: VendorInstallationSlot = {
+      ...slot,
+      pricingTier: slot.pricingTier as PricingTier | null,
+    };
+    return c.json(successResponse(responseData), 201);
   }
 );
 
@@ -176,7 +205,11 @@ installationSlots.post(
     }
 
     const db = getDb();
-    const owned = await verifyInstallationOwnership(db, walletAddress, result.entity.id);
+    const owned = await verifyInstallationOwnership(
+      db,
+      walletAddress,
+      result.entity.id
+    );
     if (!owned) {
       return c.json(errorResponse("Installation not found"), 404);
     }
@@ -196,7 +229,10 @@ installationSlots.post(
       .insert(vendorInstallationSlots)
       .values(values)
       .onConflictDoUpdate({
-        target: [vendorInstallationSlots.installationWalletAddress, vendorInstallationSlots.label],
+        target: [
+          vendorInstallationSlots.installationWalletAddress,
+          vendorInstallationSlots.label,
+        ],
         set: {
           row: sql`excluded.row`,
           column: sql`excluded.column`,
@@ -207,7 +243,11 @@ installationSlots.post(
       })
       .returning();
 
-    return c.json(successResponse(slots), 201);
+    const responseData: VendorInstallationSlot[] = slots.map(s => ({
+      ...s,
+      pricingTier: s.pricingTier as PricingTier | null,
+    }));
+    return c.json(successResponse(responseData), 201);
   }
 );
 
@@ -256,12 +296,16 @@ installationSlots.put(
       return c.json(errorResponse("Slot not found"), 404);
     }
 
-    const [updated] = await db
+    const [updatedRow] = await db
       .update(vendorInstallationSlots)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(vendorInstallationSlots.id, slotId))
       .returning();
 
+    const updated: VendorInstallationSlot = {
+      ...updatedRow,
+      pricingTier: updatedRow.pricingTier as PricingTier | null,
+    };
     return c.json(successResponse(updated));
   }
 );
@@ -309,7 +353,8 @@ installationSlots.delete("/:slotId", async c => {
     .update(vendorInstallationSlots)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
     .where(eq(vendorInstallationSlots.id, slotId));
-  return c.json(successResponse({ deleted: true }));
+  const deleteData: DeleteResult = { deleted: true };
+  return c.json(successResponse(deleteData));
 });
 
 /** DELETE /installation/:walletAddress - Delete all slots for an installation */
@@ -332,7 +377,11 @@ installationSlots.delete("/installation/:walletAddress", async c => {
   }
 
   const db = getDb();
-  const owned = await verifyInstallationOwnership(db, walletAddress, result.entity.id);
+  const owned = await verifyInstallationOwnership(
+    db,
+    walletAddress,
+    result.entity.id
+  );
   if (!owned) {
     return c.json(errorResponse("Installation not found"), 404);
   }
@@ -340,8 +389,11 @@ installationSlots.delete("/installation/:walletAddress", async c => {
   await db
     .update(vendorInstallationSlots)
     .set({ status: "Deleted" as const, updatedAt: new Date() })
-    .where(eq(vendorInstallationSlots.installationWalletAddress, walletAddress));
-  return c.json(successResponse({ deleted: true }));
+    .where(
+      eq(vendorInstallationSlots.installationWalletAddress, walletAddress)
+    );
+  const deleteData: DeleteResult = { deleted: true };
+  return c.json(successResponse(deleteData));
 });
 
 export default installationSlots;

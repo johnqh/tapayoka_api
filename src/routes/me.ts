@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.ts";
 import { users } from "../db/schema.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import {
+  successResponse,
+  errorResponse,
+  type UserProfile,
+} from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../lib/hono-types.ts";
 
 const meRouter = new Hono<AppEnv>();
@@ -29,12 +33,12 @@ meRouter.get("/", async c => {
     return c.json(errorResponse("User not found"), 404);
   }
 
-  return c.json(
-    successResponse({
-      ...user,
-      tosAcceptedAt: user.tosAcceptedAt?.toISOString() ?? null,
-    })
-  );
+  const profile: UserProfile = {
+    ...user,
+    tosAcceptedAt: user.tosAcceptedAt?.toISOString() ?? null,
+  };
+
+  return c.json(successResponse(profile));
 });
 
 export default meRouter;

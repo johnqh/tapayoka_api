@@ -14,6 +14,7 @@ import { deviceVerifySchema } from "../../schemas/index.ts";
 import {
   successResponse,
   errorResponse,
+  type BuyerVerifyResponse,
   type PricingTier,
   type DailySchedule,
   type DayOfWeek,
@@ -40,8 +41,11 @@ const ACTIVE_ORDER_STATUSES = [
  */
 function evaluateOperating(
   schedule: DailySchedule[] | null,
-  tz: string,
-): { operating: boolean; operatingPeriod: { start: string; end: string } | null } {
+  tz: string
+): {
+  operating: boolean;
+  operatingPeriod: { start: string; end: string } | null;
+} {
   if (!schedule || schedule.length === 0) {
     return { operating: true, operatingPeriod: null };
   }
@@ -56,7 +60,9 @@ function evaluateOperating(
   });
 
   const parts = formatter.formatToParts(now);
-  const weekday = parts.find(p => p.type === "weekday")?.value as DayOfWeek | undefined;
+  const weekday = parts.find(p => p.type === "weekday")?.value as
+    | DayOfWeek
+    | undefined;
   const hour = parts.find(p => p.type === "hour")?.value ?? "00";
   const minute = parts.find(p => p.type === "minute")?.value ?? "00";
   const currentTime = `${hour}:${minute}`;
@@ -66,7 +72,10 @@ function evaluateOperating(
   }
 
   const matchedEntry = schedule.find(
-    entry => entry.dayOfWeek === weekday && currentTime >= entry.startTime && currentTime <= entry.endTime,
+    entry =>
+      entry.dayOfWeek === weekday &&
+      currentTime >= entry.startTime &&
+      currentTime <= entry.endTime
   );
 
   if (!matchedEntry) {
@@ -83,7 +92,9 @@ function evaluateOperating(
 
   // Convert from local tz to UTC by computing the offset
   const utcNow = now.getTime();
-  const localNow = new Date(now.toLocaleString("en-US", { timeZone: tz })).getTime();
+  const localNow = new Date(
+    now.toLocaleString("en-US", { timeZone: tz })
+  ).getTime();
   const offset = localNow - utcNow;
 
   const startUtc = new Date(startLocal.getTime() - offset);
@@ -104,7 +115,7 @@ function evaluateOperating(
  */
 function resolveSlotPricingTier(
   slot: { pricingTierId: string | null; pricingTier: unknown },
-  offeringTiers: PricingTier[],
+  offeringTiers: PricingTier[]
 ): PricingTier | null {
   if (slot.pricingTierId) {
     const found = offeringTiers.find(t => t.id === slot.pricingTierId);
@@ -131,7 +142,7 @@ buyerDevices.post(
     const isValid = verifySignature(
       signedPayload,
       signature,
-      deviceWalletAddress,
+      deviceWalletAddress
     );
     if (!isValid) {
       return c.json(errorResponse("Invalid device signature"), 400);
@@ -149,11 +160,11 @@ buyerDevices.post(
       .from(vendorInstallations)
       .innerJoin(
         vendorOfferings,
-        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id),
+        eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
       )
       .innerJoin(
         vendorModels,
-        eq(vendorOfferings.vendorModelId, vendorModels.id),
+        eq(vendorOfferings.vendorModelId, vendorModels.id)
       )
       .where(eq(vendorInstallations.walletAddress, deviceWalletAddress))
       .limit(1);
@@ -178,9 +189,12 @@ buyerDevices.post(
       .from(vendorInstallationSlots)
       .where(
         and(
-          eq(vendorInstallationSlots.installationWalletAddress, deviceWalletAddress),
-          eq(vendorInstallationSlots.status, "Active"),
-        ),
+          eq(
+            vendorInstallationSlots.installationWalletAddress,
+            deviceWalletAddress
+          ),
+          eq(vendorInstallationSlots.status, "Active")
+        )
       )
       .orderBy(vendorInstallationSlots.sortOrder);
 
@@ -195,42 +209,46 @@ buyerDevices.post(
         .where(
           and(
             inArray(orders.slotId, slotIds),
-            inArray(orders.status, [...ACTIVE_ORDER_STATUSES]),
-          ),
+            inArray(orders.status, [...ACTIVE_ORDER_STATUSES])
+          )
         );
       unavailableSlotIds = new Set(
-        activeOrders.map(o => o.slotId).filter((id): id is string => id !== null),
+        activeOrders
+          .map(o => o.slotId)
+          .filter((id): id is string => id !== null)
       );
     }
 
-    return c.json(
-      successResponse({
-        model: {
-          name: result.model.name,
-          slot: (result.model.slot as VendorModelSlot) ?? null,
-          pricing: (result.model.pricing as VendorModelPricing) ?? null,
-          slotPricing: (result.model.slotPricing as VendorModelSlotPricing) ?? null,
-          action: (result.model.action as VendorModelAction) ?? null,
-          interruption: (result.model.interruption as VendorModelInterruption) ?? null,
-          payment: (result.model.payment as VendorModelPayment) ?? null,
-        },
-        installation: {
-          name: result.installation.label,
-        },
-        operating,
-        operatingPeriod,
-        slots: slots.map(slot => ({
-          id: slot.id,
-          label: slot.label,
-          row: slot.row,
-          column: slot.column,
-          sortOrder: slot.sortOrder,
-          pricingTier: resolveSlotPricingTier(slot, offeringTiers),
-          available: !unavailableSlotIds.has(slot.id),
-        })),
-      }),
-    );
-  },
+    const verifyData: BuyerVerifyResponse = {
+      model: {
+        name: result.model.name,
+        slot: (result.model.slot as VendorModelSlot) ?? null,
+        pricing: (result.model.pricing as VendorModelPricing) ?? null,
+        slotPricing:
+          (result.model.slotPricing as VendorModelSlotPricing) ?? null,
+        action: (result.model.action as VendorModelAction) ?? null,
+        interruption:
+          (result.model.interruption as VendorModelInterruption) ?? null,
+        payment: (result.model.payment as VendorModelPayment) ?? null,
+      },
+      installation: {
+        name: result.installation.label,
+      },
+      operating,
+      operatingPeriod,
+      slots: slots.map(slot => ({
+        id: slot.id,
+        label: slot.label,
+        row: slot.row,
+        column: slot.column,
+        sortOrder: slot.sortOrder,
+        pricingTier: resolveSlotPricingTier(slot, offeringTiers),
+        available: !unavailableSlotIds.has(slot.id),
+      })),
+    };
+
+    return c.json(successResponse(verifyData));
+  }
 );
 
 export default buyerDevices;

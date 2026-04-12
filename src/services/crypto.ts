@@ -46,7 +46,11 @@ export function verifySignature(
   try {
     const sig = signature.startsWith("0x") ? signature : `0x${signature}`;
     const recovered = ethers.verifyMessage(message, sig);
-    console.log("[crypto] verifySignature", { recovered, expectedAddress, match: recovered.toLowerCase() === expectedAddress.toLowerCase() });
+    console.log("[crypto] verifySignature", {
+      recovered,
+      expectedAddress,
+      match: recovered.toLowerCase() === expectedAddress.toLowerCase(),
+    });
     return recovered.toLowerCase() === expectedAddress.toLowerCase();
   } catch (e) {
     console.log("[crypto] verifySignature error:", e);
@@ -62,17 +66,17 @@ export async function signResponseData<T extends object>(
   data: T
 ): Promise<BaseResponse<SignedData<T>>> {
   const wallet = getServerWallet();
-  return signedSuccessResponse(
-    data,
-    wallet.address,
-    (msg) => wallet.signMessage(msg)
+  return signedSuccessResponse(data, wallet.address, msg =>
+    wallet.signMessage(msg)
   );
 }
 
 /**
  * Verify a SignedData envelope: data integrity + signature.
  */
-export function verifySignedDataFull<T extends object>(signed: SignedData<T>): boolean {
+export function verifySignedDataFull<T extends object>(
+  signed: SignedData<T>
+): boolean {
   return (
     verifySignedData(signed) &&
     verifySignedDataSignature(signed.signing, verifySignature)

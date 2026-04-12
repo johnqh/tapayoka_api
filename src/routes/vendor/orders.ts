@@ -2,7 +2,12 @@ import { Hono } from "hono";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import { orders, devices, offerings } from "../../db/schema.ts";
-import { successResponse, errorResponse } from "@sudobility/tapayoka_types";
+import {
+  successResponse,
+  errorResponse,
+  type OrderDetailed,
+  type DashboardStats,
+} from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
 import {
   getEntityWithPermission,
@@ -43,7 +48,7 @@ vendorOrders.get("/", async c => {
 
   const results = await query;
 
-  const detailed = results.map(r => ({
+  const detailed: OrderDetailed[] = results.map(r => ({
     ...r.order,
     deviceLabel: r.deviceLabel,
     offeringName: r.offeringName,
@@ -135,22 +140,20 @@ vendorOrders.get("/stats", async c => {
     .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .where(and(eq(devices.entityId, entityId), eq(orders.status, "FAILED")));
 
-  const total =
-    Number(doneCount?.count ?? 0) + Number(failedCount?.count ?? 0);
-  const successRate =
-    total > 0 ? Number(doneCount?.count ?? 0) / total : 1;
+  const total = Number(doneCount?.count ?? 0) + Number(failedCount?.count ?? 0);
+  const successRate = total > 0 ? Number(doneCount?.count ?? 0) / total : 1;
 
-  return c.json(
-    successResponse({
-      totalDevices: Number(deviceCount?.count ?? 0),
-      activeDevices: Number(activeDeviceCount?.count ?? 0),
-      totalOrders: Number(orderCount?.count ?? 0),
-      activeOrders: Number(activeOrderCount?.count ?? 0),
-      revenueTodayCents: Number(revenueToday?.total ?? 0),
-      revenueThisWeekCents: Number(revenueWeek?.total ?? 0),
-      successRate: Math.round(successRate * 100) / 100,
-    })
-  );
+  const stats: DashboardStats = {
+    totalDevices: Number(deviceCount?.count ?? 0),
+    activeDevices: Number(activeDeviceCount?.count ?? 0),
+    totalOrders: Number(orderCount?.count ?? 0),
+    activeOrders: Number(activeOrderCount?.count ?? 0),
+    revenueTodayCents: Number(revenueToday?.total ?? 0),
+    revenueThisWeekCents: Number(revenueWeek?.total ?? 0),
+    successRate: Math.round(successRate * 100) / 100,
+  };
+
+  return c.json(successResponse(stats));
 });
 
 export default vendorOrders;

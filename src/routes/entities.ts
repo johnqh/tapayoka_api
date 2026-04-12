@@ -10,6 +10,10 @@ import {
 import {
   successResponse,
   errorResponse,
+  type Entity,
+  type EntityWithRole,
+  type EntityMember,
+  type EntityInvitation,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../lib/hono-types.ts";
 
@@ -25,7 +29,7 @@ entitiesRouter.get("/", async c => {
   const userEmail = c.get("userEmail");
 
   try {
-    const userEntities = await helpers.entity.getUserEntities(
+    const userEntities: EntityWithRole[] = await helpers.entity.getUserEntities(
       userId,
       userEmail ?? undefined
     );
@@ -68,14 +72,15 @@ entitiesRouter.post("/", async c => {
         user?.displayName || user?.email?.split("@")[0] || "My Organization";
     }
 
-    let entity;
+    let entity: Entity;
     try {
       entity = await helpers.entity.createOrganizationEntity(userId, {
         displayName: entityDisplayName,
       });
     } catch {
       // Entity may already exist (e.g. user accepted buyer TOS first)
-      const existing = await helpers.entity.getUserEntities(userId);
+      const existing: EntityWithRole[] =
+        await helpers.entity.getUserEntities(userId);
       if (existing.length > 0) {
         return c.json(successResponse(existing[0]), 200);
       }
@@ -105,7 +110,8 @@ entitiesRouter.get("/:entitySlug", async c => {
     }
 
     const role = await helpers.members.getUserRole(entity.id, userId);
-    return c.json(successResponse({ ...entity, userRole: role }));
+    const data: EntityWithRole = { ...entity, userRole: role! };
+    return c.json(successResponse(data));
   } catch (error: any) {
     console.error("Error getting entity:", error);
     return c.json(errorResponse(error.message || "Internal server error"), 500);
@@ -129,7 +135,7 @@ entitiesRouter.put("/:entitySlug", async c => {
       return c.json(errorResponse("Insufficient permissions"), 403);
     }
 
-    const updated = await helpers.entity.updateEntity(entity.id, body);
+    const updated: Entity = await helpers.entity.updateEntity(entity.id, body);
     return c.json(successResponse(updated));
   } catch (error: any) {
     console.error("Error updating entity:", error);
@@ -182,7 +188,9 @@ entitiesRouter.get("/:entitySlug/members", async c => {
       );
     }
 
-    const members = await helpers.members.getMembers(result.entity.id);
+    const members: EntityMember[] = await helpers.members.getMembers(
+      result.entity.id
+    );
     return c.json(successResponse(members));
   } catch (error: any) {
     console.error("Error listing members:", error);
@@ -216,7 +224,7 @@ entitiesRouter.put("/:entitySlug/members/:memberId", async c => {
       return c.json(errorResponse("Insufficient permissions"), 403);
     }
 
-    const updated = await helpers.members.updateMemberRole(
+    const updated: EntityMember = await helpers.members.updateMemberRole(
       entity.id,
       memberId,
       role
@@ -279,9 +287,8 @@ entitiesRouter.get("/:entitySlug/invitations", async c => {
       return c.json(errorResponse("Insufficient permissions"), 403);
     }
 
-    const invitations = await helpers.invitations.getEntityInvitations(
-      entity.id
-    );
+    const invitations: EntityInvitation[] =
+      await helpers.invitations.getEntityInvitations(entity.id);
     return c.json(successResponse(invitations));
   } catch (error: any) {
     console.error("Error listing invitations:", error);
@@ -314,11 +321,11 @@ entitiesRouter.post("/:entitySlug/invitations", async c => {
       return c.json(errorResponse("Insufficient permissions"), 403);
     }
 
-    const invitation = await helpers.invitations.createInvitation(
-      entity.id,
-      userId,
-      { email, role }
-    );
+    const invitation: EntityInvitation =
+      await helpers.invitations.createInvitation(entity.id, userId, {
+        email,
+        role,
+      });
 
     return c.json(successResponse(invitation), 201);
   } catch (error: any) {
@@ -347,7 +354,8 @@ entitiesRouter.put("/:entitySlug/invitations/:invitationId", async c => {
       return c.json(errorResponse("Insufficient permissions"), 403);
     }
 
-    const renewed = await helpers.invitations.renewInvitation(invitationId);
+    const renewed: EntityInvitation =
+      await helpers.invitations.renewInvitation(invitationId);
     return c.json(successResponse(renewed));
   } catch (error: any) {
     console.error("Error renewing invitation:", error);
