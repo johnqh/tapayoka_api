@@ -566,6 +566,9 @@ export async function initDatabase() {
     END $$;
   `);
 
+  // Add stripe_customer_id to users
+  await connection`ALTER TABLE tapayoka.users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)`;
+
   // Create indexes
   await connection`CREATE INDEX IF NOT EXISTS devices_entity_idx ON tapayoka.devices(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS offerings_entity_idx ON tapayoka.offerings(entity_id)`;

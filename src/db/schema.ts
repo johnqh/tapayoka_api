@@ -118,6 +118,7 @@ export const users = tapayoka.table("users", {
   email: varchar("email", { length: 255 }),
   displayName: varchar("display_name", { length: 255 }),
   role: userRoleEnum("role").notNull().default("buyer"),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   tosAcceptedAt: timestamp("tos_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

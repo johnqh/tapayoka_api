@@ -38,3 +38,59 @@ export async function confirmPayment(
     payment_method: paymentMethodId,
   });
 }
+
+/** Create a Stripe customer */
+export async function createCustomer(params: {
+  email?: string | null;
+  name?: string | null;
+  metadata?: Record<string, string>;
+}): Promise<Stripe.Customer> {
+  const stripe = getStripe();
+  return stripe.customers.create({
+    email: params.email ?? undefined,
+    name: params.name ?? undefined,
+    metadata: params.metadata,
+  });
+}
+
+/** Create a SetupIntent for saving a payment method to a customer */
+export async function createSetupIntent(
+  customerId: string
+): Promise<Stripe.SetupIntent> {
+  const stripe = getStripe();
+  return stripe.setupIntents.create({
+    customer: customerId,
+    usage: "off_session",
+  });
+}
+
+/** List payment methods for a customer */
+export async function listPaymentMethods(
+  customerId: string
+): Promise<Stripe.PaymentMethod[]> {
+  const stripe = getStripe();
+  const result = await stripe.paymentMethods.list({
+    customer: customerId,
+    type: "card",
+  });
+  return result.data;
+}
+
+/** Detach a payment method from its customer */
+export async function detachPaymentMethod(
+  paymentMethodId: string
+): Promise<Stripe.PaymentMethod> {
+  const stripe = getStripe();
+  return stripe.paymentMethods.detach(paymentMethodId);
+}
+
+/** Set a customer's default payment method */
+export async function setDefaultPaymentMethod(
+  customerId: string,
+  paymentMethodId: string
+): Promise<Stripe.Customer> {
+  const stripe = getStripe();
+  return stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+}

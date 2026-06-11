@@ -10,6 +10,7 @@ import health from "./public/health.ts";
 import buyerDevices from "./buyer/devices.ts";
 import buyerOrders from "./buyer/orders.ts";
 import buyerAuthorizations from "./buyer/authorizations.ts";
+import buyerPaymentMethods from "./buyer/paymentMethods.ts";
 import telemetry from "./buyer/telemetry.ts";
 
 // Entity/vendor routes
@@ -37,6 +38,7 @@ const buyerRoutes = new Hono<AppEnv>();
 buyerRoutes.use("*", firebaseAuth);
 buyerRoutes.route("/orders", buyerOrders);
 buyerRoutes.route("/authorizations", buyerAuthorizations);
+buyerRoutes.route("/payment-methods", buyerPaymentMethods);
 buyerRoutes.route("/telemetry", telemetry);
 routes.route("/buyer", buyerRoutes);
 
