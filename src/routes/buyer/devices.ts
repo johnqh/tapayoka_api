@@ -234,6 +234,7 @@ buyerDevices.post(
       installation: {
         name: result.installation.label,
       },
+      offeringTiers,
       operating,
       operatingPeriod,
       slots: slots.map(slot => ({
