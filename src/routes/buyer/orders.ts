@@ -22,41 +22,15 @@ import {
   errorResponse,
   type PricingTier,
   type AuthorizationPayload,
-  type OfferingType,
   type PiCommand,
   type Order,
 } from "@sudobility/tapayoka_types";
+import { resolveTierForOrder } from "../../services/resolveTier.ts";
 import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
 
-/** Resolve the offering type for a given order */
-async function resolveOfferingType(
-  db: ReturnType<typeof getDb>,
-  order: { pricingTierId: string | null; deviceWalletAddress: string }
-): Promise<OfferingType> {
-  if (order.pricingTierId) {
-    const [installation] = await db
-      .select()
-      .from(vendorInstallations)
-      .where(eq(vendorInstallations.walletAddress, order.deviceWalletAddress))
-      .limit(1);
-    if (installation) {
-      const [offering] = await db
-        .select()
-        .from(vendorOfferings)
-        .where(eq(vendorOfferings.id, installation.vendorOfferingId))
-        .limit(1);
-      if (offering) {
-        const tiers = offering.pricingTiers as PricingTier[];
-        const tier = tiers.find(t => t.id === order.pricingTierId);
-        if (tier) return tier.type === "fixed" ? "FIXED" : "TIMED";
-      }
-    }
-  }
-  return "TRIGGER";
-}
 
 /** Create an authorization for an order and return a PiCommand ready to relay */
 async function createAuthorizationForOrder(
@@ -68,12 +42,13 @@ async function createAuthorizationForOrder(
     authorizedSeconds: number;
   }
 ): Promise<PiCommand> {
-  const offeringType = await resolveOfferingType(db, order);
+  const { offeringType, signals } = await resolveTierForOrder(db, order);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
   const payload: AuthorizationPayload = {
     orderId: order.id,
     offeringType,
     seconds: order.authorizedSeconds,
+    ...(signals ? { signals } : {}),
     nonce: randomUUID(),
     exp: Math.floor(expiresAt.getTime() / 1000),
   };

@@ -2,21 +2,14 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import {
-  authorizations,
-  orders,
-  offerings,
-  vendorInstallations,
-  vendorOfferings,
-} from "../../db/schema.ts";
+import { authorizations, orders } from "../../db/schema.ts";
 import { createAuthorizationSchema, uuidSchema } from "../../schemas/index.ts";
 import { signPayload, getServerAddress } from "../../services/crypto.ts";
+import { resolveTierForOrder } from "../../services/resolveTier.ts";
 import {
   piSuccessResponse,
   errorResponse,
   type AuthorizationPayload,
-  type OfferingType,
-  type PricingTier,
   type PiCommand,
   type Order,
 } from "@sudobility/tapayoka_types";
@@ -24,55 +17,6 @@ import { randomUUID } from "crypto";
 
 const buyerAuthorizations = new Hono();
 
-/** Resolve offering type for the authorization payload */
-async function resolveOfferingType(
-  db: ReturnType<typeof getDb>,
-  order: {
-    offeringId: string | null;
-    pricingTierId: string | null;
-    deviceWalletAddress: string;
-  }
-): Promise<OfferingType> {
-  // New flow: resolve from pricing tier
-  if (order.pricingTierId) {
-    const [installation] = await db
-      .select()
-      .from(vendorInstallations)
-      .where(eq(vendorInstallations.walletAddress, order.deviceWalletAddress))
-      .limit(1);
-
-    if (installation) {
-      const [offering] = await db
-        .select()
-        .from(vendorOfferings)
-        .where(eq(vendorOfferings.id, installation.vendorOfferingId))
-        .limit(1);
-
-      if (offering) {
-        const tiers = offering.pricingTiers as PricingTier[];
-        const tier = tiers.find(t => t.id === order.pricingTierId);
-        if (tier) {
-          return tier.type === "fixed" ? "FIXED" : "TIMED";
-        }
-      }
-    }
-  }
-
-  // Legacy fallback: resolve from offerings table
-  if (order.offeringId) {
-    const [offering] = await db
-      .select()
-      .from(offerings)
-      .where(eq(offerings.id, order.offeringId))
-      .limit(1);
-
-    if (offering) {
-      return offering.type as OfferingType;
-    }
-  }
-
-  return "TRIGGER";
-}
 
 /**
  * POST / - Create authorization for a paid order.
@@ -115,7 +59,7 @@ buyerAuthorizations.post(
       return c.json(errorResponse("Authorization already exists"), 409);
     }
 
-    const offeringType = await resolveOfferingType(db, order);
+    const { offeringType, signals } = await resolveTierForOrder(db, order);
 
     // Build authorization payload
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -123,6 +67,7 @@ buyerAuthorizations.post(
       orderId: order.id,
       offeringType,
       seconds: order.authorizedSeconds,
+      ...(signals ? { signals } : {}),
       nonce: randomUUID(),
       exp: Math.floor(expiresAt.getTime() / 1000),
     };
