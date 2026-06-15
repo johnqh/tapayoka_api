@@ -38,12 +38,6 @@ export const orderStatusEnum = tapayoka.enum("order_status", [
   "FAILED",
 ]);
 
-export const deviceStatusEnum = tapayoka.enum("device_status", [
-  "ACTIVE",
-  "OFFLINE",
-  "MAINTENANCE",
-  "DEACTIVATED",
-]);
 
 export const userRoleEnum = tapayoka.enum("user_role", ["vendor", "buyer"]);
 
@@ -124,27 +118,6 @@ export const users = tapayoka.table("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const devices = tapayoka.table(
-  "devices",
-  {
-    walletAddress: varchar("wallet_address", { length: 42 })
-      .primaryKey()
-      .notNull(),
-    entityId: uuid("entity_id")
-      .notNull()
-      .references(() => entities.id, { onDelete: "cascade" }),
-    label: varchar("label", { length: 255 }).notNull(),
-    model: varchar("model", { length: 255 }),
-    location: varchar("location", { length: 255 }),
-    gpioConfig: jsonb("gpio_config"),
-    status: deviceStatusEnum("status").notNull().default("ACTIVE"),
-    serverWalletAddress: varchar("server_wallet_address", { length: 42 }),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
-  },
-  table => [index("devices_entity_idx").on(table.entityId)]
-);
-
 export const offerings = tapayoka.table(
   "offerings",
   {
@@ -170,7 +143,9 @@ export const deviceOfferings = tapayoka.table(
   {
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => devices.walletAddress, { onDelete: "cascade" }),
+      .references(() => vendorInstallations.walletAddress, {
+        onDelete: "cascade",
+      }),
     offeringId: uuid("offering_id")
       .notNull()
       .references(() => offerings.id, { onDelete: "cascade" }),
@@ -189,7 +164,7 @@ export const orders = tapayoka.table(
     id: uuid("id").primaryKey().defaultRandom(),
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => devices.walletAddress),
+      .references(() => vendorInstallations.walletAddress),
     offeringId: uuid("offering_id").references(() => offerings.id),
     pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     buyerUid: varchar("buyer_uid", { length: 128 }),
@@ -233,7 +208,7 @@ export const deviceLogs = tapayoka.table(
     id: uuid("id").primaryKey().defaultRandom(),
     deviceWalletAddress: varchar("device_wallet_address", { length: 42 })
       .notNull()
-      .references(() => devices.walletAddress),
+      .references(() => vendorInstallations.walletAddress),
     direction: logDirectionEnum("direction").notNull(),
     ok: boolean("ok").notNull().default(true),
     details: text("details"),

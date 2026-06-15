@@ -1,7 +1,13 @@
 import { Hono } from "hono";
-import { eq, desc, sql, and, gte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { orders, devices, offerings } from "../../db/schema.ts";
+import {
+  orders,
+  vendorInstallations,
+  vendorOfferings,
+  vendorLocations,
+  offerings,
+} from "../../db/schema.ts";
 import {
   successResponse,
   errorResponse,
@@ -15,6 +21,29 @@ import {
 } from "../../lib/entity-helpers.ts";
 
 const vendorOrders = new Hono<AppEnv>();
+
+/**
+ * Subquery of installation wallet addresses owned by an entity.
+ * Installations are entity-scoped indirectly:
+ *   vendor_installations -> vendor_offerings -> vendor_locations.entity_id
+ */
+function entityInstallationWallets(
+  db: ReturnType<typeof getDb>,
+  entityId: string
+) {
+  return db
+    .select({ wallet: vendorInstallations.walletAddress })
+    .from(vendorInstallations)
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+    )
+    .innerJoin(
+      vendorLocations,
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
+    )
+    .where(eq(vendorLocations.entityId, entityId));
+}
 
 /** GET / - List recent orders for entity */
 vendorOrders.get("/", async c => {
@@ -32,21 +61,30 @@ vendorOrders.get("/", async c => {
 
   const db = getDb();
 
-  const query = db
+  const results = await db
     .select({
       order: orders,
-      deviceLabel: devices.label,
+      deviceLabel: vendorInstallations.label,
       offeringName: offerings.name,
       offeringType: offerings.type,
     })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
+    .innerJoin(
+      vendorInstallations,
+      eq(orders.deviceWalletAddress, vendorInstallations.walletAddress)
+    )
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+    )
+    .innerJoin(
+      vendorLocations,
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
+    )
     .innerJoin(offerings, eq(orders.offeringId, offerings.id))
-    .where(eq(devices.entityId, result.entity.id))
+    .where(eq(vendorLocations.entityId, result.entity.id))
     .orderBy(desc(orders.createdAt))
     .limit(limit);
-
-  const results = await query;
 
   const detailed: OrderDetailed[] = results.map(r => ({
     ...r.order,
@@ -74,29 +112,52 @@ vendorOrders.get("/stats", async c => {
   const db = getDb();
   const entityId = result.entity.id;
 
-  // Get counts scoped to entity
+  // Orders belonging to this entity's installations.
+  const ordersOfEntity = () =>
+    inArray(orders.deviceWalletAddress, entityInstallationWallets(db, entityId));
+
+  // Device (installation) counts scoped to entity
   const [deviceCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(devices)
-    .where(eq(devices.entityId, entityId));
+    .from(vendorInstallations)
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+    )
+    .innerJoin(
+      vendorLocations,
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
+    )
+    .where(eq(vendorLocations.entityId, entityId));
 
   const [activeDeviceCount] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(devices)
-    .where(and(eq(devices.entityId, entityId), eq(devices.status, "ACTIVE")));
+    .from(vendorInstallations)
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+    )
+    .innerJoin(
+      vendorLocations,
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
+    )
+    .where(
+      and(
+        eq(vendorLocations.entityId, entityId),
+        eq(vendorInstallations.status, "Active")
+      )
+    );
 
-  // Orders through entity's devices
+  // Orders through entity's installations
   const [orderCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
-    .where(eq(devices.entityId, entityId));
+    .where(ordersOfEntity());
 
   const [activeOrderCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
-    .where(and(eq(devices.entityId, entityId), eq(orders.status, "RUNNING")));
+    .where(and(ordersOfEntity(), eq(orders.status, "RUNNING")));
 
   // Revenue today
   const today = new Date();
@@ -104,13 +165,8 @@ vendorOrders.get("/stats", async c => {
   const [revenueToday] = await db
     .select({ total: sql<number>`COALESCE(SUM(${orders.amountCents}), 0)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .where(
-      and(
-        eq(devices.entityId, entityId),
-        eq(orders.status, "DONE"),
-        gte(orders.createdAt, today)
-      )
+      and(ordersOfEntity(), eq(orders.status, "DONE"), gte(orders.createdAt, today))
     );
 
   // Revenue this week
@@ -118,10 +174,9 @@ vendorOrders.get("/stats", async c => {
   const [revenueWeek] = await db
     .select({ total: sql<number>`COALESCE(SUM(${orders.amountCents}), 0)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
     .where(
       and(
-        eq(devices.entityId, entityId),
+        ordersOfEntity(),
         eq(orders.status, "DONE"),
         gte(orders.createdAt, weekAgo)
       )
@@ -131,14 +186,12 @@ vendorOrders.get("/stats", async c => {
   const [doneCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
-    .where(and(eq(devices.entityId, entityId), eq(orders.status, "DONE")));
+    .where(and(ordersOfEntity(), eq(orders.status, "DONE")));
 
   const [failedCount] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .innerJoin(devices, eq(orders.deviceWalletAddress, devices.walletAddress))
-    .where(and(eq(devices.entityId, entityId), eq(orders.status, "FAILED")));
+    .where(and(ordersOfEntity(), eq(orders.status, "FAILED")));
 
   const total = Number(doneCount?.count ?? 0) + Number(failedCount?.count ?? 0);
   const successRate = total > 0 ? Number(doneCount?.count ?? 0) / total : 1;

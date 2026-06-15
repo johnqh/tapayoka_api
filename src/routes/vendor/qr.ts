@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
-import { devices } from "../../db/schema.ts";
+import {
+  vendorInstallations,
+  vendorOfferings,
+  vendorLocations,
+} from "../../db/schema.ts";
 import { ethAddressSchema } from "../../schemas/index.ts";
 import {
   successResponse,
@@ -37,12 +41,20 @@ vendorQr.get("/:walletAddress", async c => {
 
   const db = getDb();
   const [device] = await db
-    .select()
-    .from(devices)
+    .select({ walletAddress: vendorInstallations.walletAddress })
+    .from(vendorInstallations)
+    .innerJoin(
+      vendorOfferings,
+      eq(vendorInstallations.vendorOfferingId, vendorOfferings.id)
+    )
+    .innerJoin(
+      vendorLocations,
+      eq(vendorOfferings.vendorLocationId, vendorLocations.id)
+    )
     .where(
       and(
-        eq(devices.walletAddress, walletAddress),
-        eq(devices.entityId, result.entity.id)
+        eq(vendorInstallations.walletAddress, walletAddress),
+        eq(vendorLocations.entityId, result.entity.id)
       )
     )
     .limit(1);

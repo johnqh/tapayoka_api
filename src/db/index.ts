@@ -46,10 +46,6 @@ export async function initDatabase() {
       name: "tapayoka.order_status",
       values: ["CREATED", "PAID", "AUTHORIZED", "RUNNING", "DONE", "FAILED"],
     },
-    {
-      name: "tapayoka.device_status",
-      values: ["ACTIVE", "OFFLINE", "MAINTENANCE", "DEACTIVATED"],
-    },
     { name: "tapayoka.user_role", values: ["vendor", "buyer"] },
     {
       name: "tapayoka.log_direction",
@@ -96,22 +92,7 @@ export async function initDatabase() {
     migrateUsers: false,
   });
 
-  // Create legacy tables (devices, offerings use entity_id FK)
-  await connection`
-    CREATE TABLE IF NOT EXISTS tapayoka.devices (
-      wallet_address VARCHAR(42) PRIMARY KEY NOT NULL,
-      entity_id UUID NOT NULL REFERENCES tapayoka.entities(id) ON DELETE CASCADE,
-      label VARCHAR(255) NOT NULL,
-      model VARCHAR(255),
-      location VARCHAR(255),
-      gpio_config JSONB,
-      status tapayoka.device_status NOT NULL DEFAULT 'ACTIVE',
-      server_wallet_address VARCHAR(42),
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `;
-
+  // Create legacy tables (offerings uses entity_id FK)
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.offerings (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -130,7 +111,7 @@ export async function initDatabase() {
 
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.device_offerings (
-      device_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.devices(wallet_address) ON DELETE CASCADE,
+      device_wallet_address VARCHAR(42) NOT NULL,
       offering_id UUID NOT NULL REFERENCES tapayoka.offerings(id) ON DELETE CASCADE,
       UNIQUE(device_wallet_address, offering_id)
     )
@@ -139,7 +120,7 @@ export async function initDatabase() {
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.orders (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      device_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.devices(wallet_address),
+      device_wallet_address VARCHAR(42) NOT NULL,
       offering_id UUID NOT NULL REFERENCES tapayoka.offerings(id),
       buyer_uid VARCHAR(128),
       amount_cents INTEGER NOT NULL,
@@ -165,7 +146,7 @@ export async function initDatabase() {
   await connection`
     CREATE TABLE IF NOT EXISTS tapayoka.device_logs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      device_wallet_address VARCHAR(42) NOT NULL REFERENCES tapayoka.devices(wallet_address),
+      device_wallet_address VARCHAR(42) NOT NULL,
       direction tapayoka.log_direction NOT NULL,
       ok BOOLEAN NOT NULL DEFAULT true,
       details TEXT,
@@ -264,7 +245,11 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE tapayoka.device_offerings RENAME COLUMN service_id TO offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN service_id TO offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN service_id TO offering_id; EXCEPTION WHEN undefined_column OR duplicate_column THEN NULL; END $$;
+  `);
+  // Legacy orders column installation_id → offering_id (equipment→installation→offering churn)
+  await connection.unsafe(`
+    DO $$ BEGIN ALTER TABLE tapayoka.orders RENAME COLUMN installation_id TO offering_id; EXCEPTION WHEN undefined_column OR duplicate_column THEN NULL; END $$;
   `);
 
   // Rename vendor tables
@@ -340,7 +325,7 @@ export async function initDatabase() {
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_offerings RENAME COLUMN vendor_equipment_category_id TO vendor_model_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
   `);
   await connection.unsafe(`
-    DO $$ BEGIN ALTER TABLE tapayoka.vendor_offering_controls RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
+    DO $$ BEGIN ALTER TABLE tapayoka.vendor_offering_controls RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column OR undefined_table THEN NULL; END $$;
   `);
   await connection.unsafe(`
     DO $$ BEGIN ALTER TABLE tapayoka.vendor_installations RENAME COLUMN vendor_service_id TO vendor_offering_id; EXCEPTION WHEN undefined_column THEN NULL; END $$;
@@ -569,8 +554,39 @@ export async function initDatabase() {
   // Add stripe_customer_id to users
   await connection`ALTER TABLE tapayoka.users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)`;
 
+  // Repoint device_wallet_address FKs from the legacy (empty) devices table to
+  // vendor_installations — the table the app actually provisions and validates
+  // against. DROP IF EXISTS + ADD makes this idempotent across restarts.
+  await connection`ALTER TABLE tapayoka.orders DROP CONSTRAINT IF EXISTS orders_device_wallet_address_fkey`;
+  await connection`ALTER TABLE tapayoka.orders ADD CONSTRAINT orders_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address)`;
+  await connection`ALTER TABLE tapayoka.device_logs DROP CONSTRAINT IF EXISTS device_logs_device_wallet_address_fkey`;
+  await connection`ALTER TABLE tapayoka.device_logs ADD CONSTRAINT device_logs_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address)`;
+  await connection`ALTER TABLE tapayoka.device_offerings DROP CONSTRAINT IF EXISTS device_offerings_device_wallet_address_fkey`;
+  await connection`ALTER TABLE tapayoka.device_offerings ADD CONSTRAINT device_offerings_device_wallet_address_fkey FOREIGN KEY (device_wallet_address) REFERENCES tapayoka.vendor_installations(wallet_address) ON DELETE CASCADE`;
+
+  // --- Drop orphan legacy tables (leftovers from service→installation→offering renames) ---
+  // First drop the stale FK on the live orders table that still points at the legacy
+  // "services" table (carried over from the old service_id column); otherwise DROP fails.
+  await connection`ALTER TABLE tapayoka.orders DROP CONSTRAINT IF EXISTS orders_service_id_fkey`;
+  // CASCADE clears the remaining inter-orphan FKs.
+  await connection`DROP TABLE IF EXISTS tapayoka.device_installations CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.device_services CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_installation_controls CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_offering_controls CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_service_controls CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_services CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.vendor_equipment_categories CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.installations CASCADE`;
+  await connection`DROP TABLE IF EXISTS tapayoka.services CASCADE`;
+
+  // Retire the legacy entity-scoped devices table (superseded by vendor_installations).
+  // Its incoming FKs (orders/device_logs/device_offerings) were repointed above.
+  await connection`DROP TABLE IF EXISTS tapayoka.devices CASCADE`;
+  await connection.unsafe(
+    `DO $$ BEGIN DROP TYPE tapayoka.device_status; EXCEPTION WHEN undefined_object OR dependent_objects_still_exist THEN NULL; END $$;`
+  );
+
   // Create indexes
-  await connection`CREATE INDEX IF NOT EXISTS devices_entity_idx ON tapayoka.devices(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS offerings_entity_idx ON tapayoka.offerings(entity_id)`;
   await connection`CREATE INDEX IF NOT EXISTS orders_device_idx ON tapayoka.orders(device_wallet_address)`;
   await connection`CREATE INDEX IF NOT EXISTS orders_status_idx ON tapayoka.orders(status)`;
