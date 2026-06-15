@@ -5,6 +5,7 @@ import { getDb } from "../../db/index.ts";
 import {
   orders,
   authorizations,
+  users,
   vendorInstallations,
   vendorOfferings,
   vendorInstallationSlots,
@@ -292,11 +293,29 @@ buyerOrders.post(
       return c.json(errorResponse("Order is not in CREATED status"), 400);
     }
 
+    // The saved payment method is attached to the buyer's Stripe customer,
+    // which must be set on the PaymentIntent to confirm with that method.
+    if (!order.buyerUid) {
+      return c.json(errorResponse("Order has no buyer"), 400);
+    }
+    const [buyer] = await db
+      .select({ stripeCustomerId: users.stripeCustomerId })
+      .from(users)
+      .where(eq(users.firebaseUid, order.buyerUid))
+      .limit(1);
+    if (!buyer?.stripeCustomerId) {
+      return c.json(errorResponse("Buyer has no payment account"), 400);
+    }
+
     try {
-      const paymentIntent = await createPaymentIntent(order.amountCents, {
-        orderId: order.id,
-        deviceWalletAddress: order.deviceWalletAddress,
-      });
+      const paymentIntent = await createPaymentIntent(
+        order.amountCents,
+        {
+          orderId: order.id,
+          deviceWalletAddress: order.deviceWalletAddress,
+        },
+        buyer.stripeCustomerId
+      );
 
       const confirmed = await confirmPayment(paymentIntent.id, paymentMethodId);
 

@@ -18,17 +18,24 @@ export function getStripe(): Stripe {
 /** Create a payment intent for an order */
 export async function createPaymentIntent(
   amountCents: number,
-  metadata: Record<string, string>
+  metadata: Record<string, string>,
+  customerId: string
 ): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
   return stripe.paymentIntents.create({
     amount: amountCents,
     currency: "usd",
     metadata,
+    // The saved card is attached to this customer; Stripe requires the
+    // customer on the PaymentIntent to confirm with an attached method.
+    customer: customerId,
+    // Card-only flow confirmed server-side: disable redirect-based methods
+    // so no return_url is required at confirm time.
+    automatic_payment_methods: { enabled: true, allow_redirects: "never" },
   });
 }
 
-/** Confirm a payment intent with a payment method */
+/** Confirm a payment intent with a saved (off-session) payment method */
 export async function confirmPayment(
   paymentIntentId: string,
   paymentMethodId: string
@@ -36,6 +43,8 @@ export async function confirmPayment(
   const stripe = getStripe();
   return stripe.paymentIntents.confirm(paymentIntentId, {
     payment_method: paymentMethodId,
+    // Saved card charged without the customer completing a UI step.
+    off_session: true,
   });
 }
 
@@ -61,6 +70,8 @@ export async function createSetupIntent(
   return stripe.setupIntents.create({
     customer: customerId,
     usage: "off_session",
+    // Card-only: avoid redirect-based methods that would require a return_url.
+    automatic_payment_methods: { enabled: true, allow_redirects: "never" },
   });
 }
 
