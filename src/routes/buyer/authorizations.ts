@@ -17,7 +17,6 @@ import { randomUUID } from "crypto";
 
 const buyerAuthorizations = new Hono();
 
-
 /**
  * POST / - Create authorization for a paid order.
  * Signs the authorization payload with the server's ETH key.

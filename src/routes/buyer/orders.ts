@@ -31,7 +31,6 @@ import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
 
-
 /** Create an authorization for an order and return a PiCommand ready to relay */
 async function createAuthorizationForOrder(
   db: ReturnType<typeof getDb>,
