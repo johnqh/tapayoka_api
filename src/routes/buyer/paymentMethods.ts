@@ -83,13 +83,29 @@ buyerPaymentMethods.get("/", async c => {
  */
 buyerPaymentMethods.post("/setup-intent", async c => {
   const firebaseUid = c.get("firebaseUid") as string;
+  console.log("[add-card] POST /setup-intent start", { firebaseUid });
 
   try {
     const customerId = await ensureStripeCustomer(firebaseUid);
+    console.log("[add-card] resolved Stripe customer", { firebaseUid, customerId });
+
     const setupIntent = await createSetupIntent(customerId);
+    console.log("[add-card] SetupIntent created", {
+      customerId,
+      setupIntentId: setupIntent.id,
+      status: setupIntent.status,
+      hasClientSecret: Boolean(setupIntent.client_secret),
+    });
 
     return c.json(successResponse({ clientSecret: setupIntent.client_secret }));
   } catch (error: any) {
+    console.error("[add-card] failed to create setup intent", {
+      firebaseUid,
+      message: error?.message,
+      type: error?.type,
+      code: error?.code,
+      stack: error?.stack,
+    });
     return c.json(
       errorResponse(error.message ?? "Failed to create setup intent"),
       500
