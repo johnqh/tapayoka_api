@@ -38,7 +38,6 @@ export const orderStatusEnum = tapayoka.enum("order_status", [
   "FAILED",
 ]);
 
-
 export const userRoleEnum = tapayoka.enum("user_role", ["vendor", "buyer"]);
 
 export const logDirectionEnum = tapayoka.enum("log_direction", [

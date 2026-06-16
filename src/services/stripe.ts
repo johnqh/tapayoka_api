@@ -48,6 +48,14 @@ export async function confirmPayment(
   });
 }
 
+/** Refund a captured payment (used when an order is released after charge) */
+export async function refundPayment(
+  paymentIntentId: string
+): Promise<Stripe.Refund> {
+  const stripe = getStripe();
+  return stripe.refunds.create({ payment_intent: paymentIntentId });
+}
+
 /** Create a Stripe customer */
 export async function createCustomer(params: {
   email?: string | null;

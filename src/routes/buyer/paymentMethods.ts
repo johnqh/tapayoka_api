@@ -87,7 +87,10 @@ buyerPaymentMethods.post("/setup-intent", async c => {
 
   try {
     const customerId = await ensureStripeCustomer(firebaseUid);
-    console.log("[add-card] resolved Stripe customer", { firebaseUid, customerId });
+    console.log("[add-card] resolved Stripe customer", {
+      firebaseUid,
+      customerId,
+    });
 
     const setupIntent = await createSetupIntent(customerId);
     console.log("[add-card] SetupIntent created", {

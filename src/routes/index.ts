@@ -24,6 +24,7 @@ import vendorModels from "./vendor/models.ts";
 import vendorOfferings from "./vendor/vendorOfferings.ts";
 import vendorInstallations from "./vendor/installations.ts";
 import vendorInstallationSlots from "./vendor/installationSlots.ts";
+import deviceSetup from "./vendor/deviceSetup.ts";
 
 const routes = new Hono();
 
@@ -54,6 +55,10 @@ authRoutes.route("/entities", entitiesRouter);
 
 // Invitation management (any authenticated user)
 authRoutes.route("/invitations", invitationsRouter);
+
+// Device provisioning: server-signed SETUP_SERVER payload (vendor role)
+authRoutes.use("/device-setup/*", roleGuard("vendor"));
+authRoutes.route("/device-setup", deviceSetup);
 
 // Entity-scoped vendor routes (require vendor role)
 const vendorEntityRoutes = new Hono<AppEnv>();

@@ -35,6 +35,25 @@ export async function signPayload(payload: string): Promise<string> {
 }
 
 /**
+ * Build a server-signed SETUP_SERVER payload for provisioning a device.
+ *
+ * The device stores `signing.walletAddress` as its trusted server wallet and
+ * later verifies EXECUTE commands against it, so this must carry the server's
+ * own address signed by the server key. Mirrors the EXECUTE envelope shape:
+ * `message === JSON.stringify(data)`, no signing_timestamp.
+ */
+export async function buildServerSetupPayload(): Promise<{
+  data: { walletAddress: string };
+  signing: { walletAddress: string; message: string; signature: string };
+}> {
+  const walletAddress = getServerAddress();
+  const data = { walletAddress };
+  const message = JSON.stringify(data);
+  const signature = await signPayload(message);
+  return { data, signing: { walletAddress, message, signature } };
+}
+
+/**
  * Verify a message was signed by a specific Ethereum address.
  * Returns true if the recovered address matches.
  */

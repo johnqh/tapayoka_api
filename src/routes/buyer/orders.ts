@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, inArray } from "drizzle-orm";
 import { getDb } from "../../db/index.ts";
 import {
   orders,
@@ -15,7 +15,11 @@ import {
   processPaymentSchema,
   uuidSchema,
 } from "../../schemas/index.ts";
-import { createPaymentIntent, confirmPayment } from "../../services/stripe.ts";
+import {
+  createPaymentIntent,
+  confirmPayment,
+  refundPayment,
+} from "../../services/stripe.ts";
 import { signPayload, getServerAddress } from "../../services/crypto.ts";
 import {
   successResponse,
@@ -31,6 +35,13 @@ import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";
 
 const buyerOrders = new Hono<AppEnv>();
+
+// Pre-running statuses that hold a slot. An order in one of these that hasn't
+// been touched within the staleness window is treated as abandoned (e.g. the
+// buyer never paid, or device activation failed after payment) and no longer
+// blocks the slot.
+const PRE_RUNNING_STATUSES = ["CREATED", "PAID", "AUTHORIZED"] as const;
+const SLOT_HOLD_STALE_MS = 10 * 60 * 1000; // 10 minutes
 
 /** Create an authorization for an order and return a PiCommand ready to relay */
 async function createAuthorizationForOrder(
@@ -203,19 +214,25 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
       return c.json(errorResponse("Slot not found"), 404);
     }
 
-    // Check slot availability
+    // Check slot availability. A slot is "in use" only by a live order: one
+    // that's RUNNING, or pre-running (CREATED/PAID/AUTHORIZED) and updated
+    // recently. Pre-running orders that got stuck (never paid, or activation
+    // failed after payment) auto-release after the staleness window so a slot
+    // is never blocked forever.
+    const staleCutoff = new Date(Date.now() - SLOT_HOLD_STALE_MS);
     const [activeOrder] = await db
       .select({ id: orders.id })
       .from(orders)
       .where(
         and(
           eq(orders.slotId, slotId),
-          inArray(orders.status, [
-            "CREATED",
-            "PAID",
-            "AUTHORIZED",
-            "RUNNING",
-          ] as const)
+          or(
+            eq(orders.status, "RUNNING"),
+            and(
+              inArray(orders.status, PRE_RUNNING_STATUSES),
+              gte(orders.updatedAt, staleCutoff)
+            )
+          )
         )
       )
       .limit(1);
@@ -355,5 +372,58 @@ buyerOrders.post(
     }
   }
 );
+
+/**
+ * POST /:id/cancel - Release an order that never started.
+ *
+ * Called by the buyer app when device activation fails after payment, so the
+ * slot is freed immediately instead of waiting for the staleness window. If the
+ * order was already charged, the payment is refunded.
+ */
+buyerOrders.post("/:id/cancel", async c => {
+  const orderId = c.req.param("id");
+  const buyerUid = c.get("firebaseUid") as string;
+  const db = getDb();
+
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+
+  if (!order) {
+    return c.json(errorResponse("Order not found"), 404);
+  }
+  if (order.buyerUid !== buyerUid) {
+    return c.json(errorResponse("Forbidden"), 403);
+  }
+  if (!(PRE_RUNNING_STATUSES as readonly string[]).includes(order.status)) {
+    return c.json(
+      errorResponse(`Cannot cancel an order in ${order.status} status`),
+      400
+    );
+  }
+
+  // Refund if the card was already charged (PAID/AUTHORIZED).
+  if (order.stripePaymentIntentId) {
+    try {
+      await refundPayment(order.stripePaymentIntentId);
+    } catch (error: any) {
+      return c.json(
+        errorResponse(error?.message ?? "Failed to refund payment"),
+        502
+      );
+    }
+  }
+
+  const [updated] = await db
+    .update(orders)
+    .set({ status: "FAILED", updatedAt: new Date() })
+    .where(eq(orders.id, orderId))
+    .returning();
+
+  const data: Order = updated;
+  return c.json(successResponse(data));
+});
 
 export default buyerOrders;

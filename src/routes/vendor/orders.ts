@@ -114,7 +114,10 @@ vendorOrders.get("/stats", async c => {
 
   // Orders belonging to this entity's installations.
   const ordersOfEntity = () =>
-    inArray(orders.deviceWalletAddress, entityInstallationWallets(db, entityId));
+    inArray(
+      orders.deviceWalletAddress,
+      entityInstallationWallets(db, entityId)
+    );
 
   // Device (installation) counts scoped to entity
   const [deviceCount] = await db
@@ -166,7 +169,11 @@ vendorOrders.get("/stats", async c => {
     .select({ total: sql<number>`COALESCE(SUM(${orders.amountCents}), 0)` })
     .from(orders)
     .where(
-      and(ordersOfEntity(), eq(orders.status, "DONE"), gte(orders.createdAt, today))
+      and(
+        ordersOfEntity(),
+        eq(orders.status, "DONE"),
+        gte(orders.createdAt, today)
+      )
     );
 
   // Revenue this week
