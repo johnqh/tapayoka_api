@@ -30,6 +30,10 @@ import {
   type PiCommand,
   type Order,
 } from "@sudobility/tapayoka_types";
+import {
+  calculateAuthorizedSeconds,
+  tierMinCents,
+} from "@sudobility/tapayoka_lib/derived";
 import { resolveTierForOrder } from "../../services/resolveTier.ts";
 import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";
@@ -90,38 +94,6 @@ async function createAuthorizationForOrder(
   };
 }
 
-/** Calculate authorized seconds from a PricingTier */
-function calculateAuthorizedSeconds(
-  tier: PricingTier,
-  amountCents: number
-): number {
-  if (tier.type === "fixed") {
-    return tier.signals.reduce((sum, s) => sum + s.duration, 0);
-  }
-  // timed
-  const startPriceCents = Math.round(parseFloat(tier.startPrice) * 100);
-  const startDurationSeconds =
-    tier.startDurationUnit === "hours"
-      ? tier.startDuration * 3600
-      : tier.startDuration * 60;
-
-  if (amountCents <= startPriceCents) {
-    return startDurationSeconds;
-  }
-
-  const marginalPriceCents = Math.round(parseFloat(tier.marginalPrice) * 100);
-  const marginalDurationSeconds =
-    tier.marginalDurationUnit === "hours"
-      ? tier.marginalDuration * 3600
-      : tier.marginalDuration * 60;
-
-  if (marginalPriceCents <= 0) return startDurationSeconds;
-
-  const extraCents = amountCents - startPriceCents;
-  const extraUnits = Math.floor(extraCents / marginalPriceCents);
-  return startDurationSeconds + extraUnits * marginalDurationSeconds;
-}
-
 /**
  * GET / - List orders for the authenticated buyer
  */
@@ -180,10 +152,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
   }
 
   // Validate amount
-  const minCents =
-    tier.type === "fixed"
-      ? Math.round(parseFloat(tier.price) * 100)
-      : Math.round(parseFloat(tier.startPrice) * 100);
+  const minCents = tierMinCents(tier);
 
   if (amountCents < minCents) {
     return c.json(
@@ -266,6 +235,7 @@ buyerOrders.post("/", zValidator("json", createOrderSchema), async c => {
  */
 buyerOrders.get("/:id", async c => {
   const orderId = c.req.param("id");
+  const buyerUid = c.get("firebaseUid") as string;
   const parsed = uuidSchema.safeParse(orderId);
   if (!parsed.success) {
     return c.json(errorResponse("Invalid order ID"), 400);
@@ -281,6 +251,9 @@ buyerOrders.get("/:id", async c => {
   if (!order) {
     return c.json(errorResponse("Order not found"), 404);
   }
+  if (order.buyerUid !== buyerUid) {
+    return c.json(errorResponse("Forbidden"), 403);
+  }
 
   const data: Order = order;
   return c.json(successResponse(data));
@@ -294,6 +267,12 @@ buyerOrders.post(
   zValidator("json", processPaymentSchema),
   async c => {
     const { orderId, paymentMethodId } = c.req.valid("json");
+    const routeOrderId = c.req.param("id");
+    const buyerUid = c.get("firebaseUid") as string;
+
+    if (routeOrderId !== orderId) {
+      return c.json(errorResponse("Route order ID does not match body"), 400);
+    }
 
     const db = getDb();
     const [order] = await db
@@ -304,6 +283,9 @@ buyerOrders.post(
 
     if (!order) {
       return c.json(errorResponse("Order not found"), 404);
+    }
+    if (order.buyerUid !== buyerUid) {
+      return c.json(errorResponse("Forbidden"), 403);
     }
 
     if (order.status !== "CREATED") {

@@ -35,6 +35,68 @@ const ACTIVE_ORDER_STATUSES = [
   "RUNNING",
 ] as const;
 
+const MAX_DEVICE_PROOF_AGE_MS = 2 * 60 * 1000;
+const seenDeviceProofs = new Map<string, number>();
+
+interface DeviceProofPayload {
+  walletAddress?: unknown;
+  timestamp?: unknown;
+  nonce?: unknown;
+  signing_timestamp?: unknown;
+}
+
+function cleanupSeenDeviceProofs(now = Date.now()): void {
+  for (const [key, expiresAt] of seenDeviceProofs) {
+    if (expiresAt <= now) seenDeviceProofs.delete(key);
+  }
+}
+
+function validateDeviceProofPayload(
+  signedPayload: string,
+  deviceWalletAddress: string
+): { ok: true; nonceKey: string } | { ok: false; error: string } {
+  let payload: DeviceProofPayload;
+  try {
+    payload = JSON.parse(signedPayload) as DeviceProofPayload;
+  } catch {
+    return { ok: false, error: "Invalid signed payload" };
+  }
+
+  if (
+    typeof payload.walletAddress !== "string" ||
+    payload.walletAddress.toLowerCase() !== deviceWalletAddress.toLowerCase()
+  ) {
+    return { ok: false, error: "Signed payload wallet mismatch" };
+  }
+
+  if (typeof payload.nonce !== "string" || payload.nonce.length === 0) {
+    return { ok: false, error: "Signed payload missing nonce" };
+  }
+
+  const now = Date.now();
+  let signedAt: number | null = null;
+  if (typeof payload.signing_timestamp === "string") {
+    signedAt = new Date(payload.signing_timestamp).getTime();
+  } else if (typeof payload.timestamp === "number") {
+    signedAt = payload.timestamp * 1000;
+  }
+
+  if (signedAt === null || Number.isNaN(signedAt)) {
+    return { ok: false, error: "Signed payload missing timestamp" };
+  }
+  if (Math.abs(now - signedAt) > MAX_DEVICE_PROOF_AGE_MS) {
+    return { ok: false, error: "Signed payload expired" };
+  }
+
+  cleanupSeenDeviceProofs(now);
+  const nonceKey = `${deviceWalletAddress.toLowerCase()}:${payload.nonce}`;
+  if (seenDeviceProofs.has(nonceKey)) {
+    return { ok: false, error: "Signed payload replayed" };
+  }
+
+  return { ok: true, nonceKey };
+}
+
 /**
  * Evaluate operating hours from schedule in given timezone.
  * Returns operating status and the current period boundaries in UTC.
@@ -138,6 +200,14 @@ buyerDevices.post(
       c.req.valid("json");
     const tz = c.req.query("tz") || "UTC";
 
+    const proof = validateDeviceProofPayload(
+      signedPayload,
+      deviceWalletAddress
+    );
+    if (!proof.ok) {
+      return c.json(errorResponse(proof.error), 400);
+    }
+
     // Verify the device's signature
     const isValid = verifySignature(
       signedPayload,
@@ -147,6 +217,7 @@ buyerDevices.post(
     if (!isValid) {
       return c.json(errorResponse("Invalid device signature"), 400);
     }
+    seenDeviceProofs.set(proof.nonceKey, Date.now() + MAX_DEVICE_PROOF_AGE_MS);
 
     const db = getDb();
 

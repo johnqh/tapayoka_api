@@ -3,6 +3,7 @@ import type {
   OfferingSignal,
   PricingTier,
 } from "@sudobility/tapayoka_types";
+import { tierAuthorizationFields as deriveTierAuthorizationFields } from "@sudobility/tapayoka_lib/derived";
 
 export interface TierAuthorizationFields {
   offeringType: OfferingType;
@@ -13,9 +14,5 @@ export interface TierAuthorizationFields {
 export function tierAuthorizationFields(
   tier: PricingTier | null | undefined
 ): TierAuthorizationFields {
-  if (!tier) return { offeringType: "TRIGGER" };
-  if (tier.type === "fixed") {
-    return { offeringType: "FIXED", signals: tier.signals };
-  }
-  return { offeringType: "TIMED" };
+  return deriveTierAuthorizationFields(tier);
 }
