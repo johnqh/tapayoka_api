@@ -25,15 +25,13 @@ import {
   successResponse,
   piSuccessResponse,
   errorResponse,
+  calculateAuthorizedSeconds,
+  tierMinCents,
   type PricingTier,
   type AuthorizationPayload,
   type PiCommand,
   type Order,
 } from "@sudobility/tapayoka_types";
-import {
-  calculateAuthorizedSeconds,
-  tierMinCents,
-} from "@sudobility/tapayoka_lib/derived";
 import { resolveTierForOrder } from "../../services/resolveTier.ts";
 import { randomUUID } from "crypto";
 import type { AppEnv } from "../../lib/hono-types.ts";

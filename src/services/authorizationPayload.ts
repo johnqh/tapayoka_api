@@ -1,9 +1,9 @@
-import type {
-  OfferingType,
-  OfferingSignal,
-  PricingTier,
+import {
+  type OfferingType,
+  type OfferingSignal,
+  type PricingTier,
+  tierAuthorizationFields as deriveTierAuthorizationFields,
 } from "@sudobility/tapayoka_types";
-import { tierAuthorizationFields as deriveTierAuthorizationFields } from "@sudobility/tapayoka_lib/derived";
 
 export interface TierAuthorizationFields {
   offeringType: OfferingType;
