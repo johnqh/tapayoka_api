@@ -9,8 +9,8 @@ import type { AppEnv } from "../lib/hono-types.ts";
 
 const invitationsRouter = new Hono<AppEnv>();
 
-/** GET /invitations/mine - List user's pending invitations */
-invitationsRouter.get("/mine", async c => {
+/** GET /invitations - List the current user's pending invitations */
+invitationsRouter.get("/", async c => {
   const userEmail = c.get("userEmail");
 
   if (!userEmail) {

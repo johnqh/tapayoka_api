@@ -117,6 +117,20 @@ export const users = tapayoka.table("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/**
+ * Snake-cased Drizzle view of the same physical `tapayoka.users` table for
+ * @sudobility/entity_service. The member/invitation helpers reference columns
+ * by the JS keys `firebase_uid` / `display_name` (matching their internal
+ * joins), whereas the app-facing `users` table above uses camelCase keys. Both
+ * map to the identical physical columns, so this is a key-naming alias only —
+ * no extra table. Pass this as `usersTable` in the entity helpers config.
+ */
+export const entityServiceUsers = tapayoka.table("users", {
+  firebase_uid: varchar("firebase_uid", { length: 128 }).notNull().unique(),
+  email: varchar("email", { length: 255 }),
+  display_name: varchar("display_name", { length: 255 }),
+});
+
 export const offerings = tapayoka.table(
   "offerings",
   {

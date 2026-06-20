@@ -3,7 +3,7 @@ import {
   entities,
   entityMembers,
   entityInvitations,
-  users,
+  entityServiceUsers,
 } from "../db/schema.ts";
 import {
   createEntityHelpers,
@@ -20,7 +20,7 @@ const sharedConfig: InvitationHelperConfig = {
   entitiesTable: entities,
   membersTable: entityMembers,
   invitationsTable: entityInvitations,
-  usersTable: users,
+  usersTable: entityServiceUsers,
 };
 
 export const entityHelpers = createEntityHelpers(sharedConfig);
