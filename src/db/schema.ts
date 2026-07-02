@@ -354,6 +354,8 @@ export const vendorInstallationSlots = tapayoka.table(
     sortOrder: integer("sort_order").notNull().default(0),
     pricingTierId: varchar("pricing_tier_id", { length: 255 }),
     pricingTier: jsonb("pricing_tier"),
+    // Per-slot relay behaviour (SlotAction) for multi-slot models.
+    action: jsonb("action"),
     status: vendorEntityStatusEnum("status").notNull().default("Active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

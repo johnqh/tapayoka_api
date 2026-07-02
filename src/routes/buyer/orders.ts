@@ -53,15 +53,17 @@ async function createAuthorizationForOrder(
     pricingTierId: string | null;
     deviceWalletAddress: string;
     authorizedSeconds: number;
+    slotId?: string | null;
   }
 ): Promise<PiCommand> {
-  const { offeringType, signals } = await resolveTierForOrder(db, order);
+  const { offeringType, signals, end } = await resolveTierForOrder(db, order);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
   const payload: AuthorizationPayload = {
     orderId: order.id,
     offeringType,
     seconds: order.authorizedSeconds,
     ...(signals ? { signals } : {}),
+    ...(end ? { end } : {}),
     nonce: randomUUID(),
     exp: Math.floor(expiresAt.getTime() / 1000),
   };

@@ -455,6 +455,11 @@ export async function initDatabase() {
   // Add slot_id column to orders (references vendor_installation_slots)
   await connection`ALTER TABLE tapayoka.orders ADD COLUMN IF NOT EXISTS slot_id UUID REFERENCES tapayoka.vendor_installation_slots(id) ON DELETE SET NULL`;
 
+  // Per-slot relay behaviour (SlotAction) for multi-slot models. No backfill
+  // needed: single-slot models keep the action on the tier, and the API derives
+  // a SlotAction from a tier's legacy pinNumber/signals when this is null.
+  await connection`ALTER TABLE tapayoka.vendor_installation_slots ADD COLUMN IF NOT EXISTS action JSONB`;
+
   // Add pricing_tier_id and pricing_tier columns to vendor_installations
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier_id VARCHAR(255)`;
   await connection`ALTER TABLE tapayoka.vendor_installations ADD COLUMN IF NOT EXISTS pricing_tier JSONB`;

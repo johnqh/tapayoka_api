@@ -100,6 +100,20 @@ const offeringSignalSchema = z.object({
   duration: z.number().int().positive(),
 });
 
+// Relay signal for a SlotAction phase. Allows duration 0 (a timed hold's start
+// pin, whose run time comes from the purchased seconds) and the full BCM pin
+// range the device supports (0–27).
+const actionSignalSchema = z.object({
+  pinNumber: z.number().int().min(0).max(27),
+  duration: z.number().int().min(0),
+});
+
+const slotActionSchema = z.object({
+  type: z.enum(["timed", "sequence"]),
+  start: z.array(actionSignalSchema).min(1),
+  end: z.array(actionSignalSchema).optional(),
+});
+
 const timedPricingTierSchema = z.object({
   type: z.literal("timed"),
   id: z.string().min(1),
@@ -111,7 +125,9 @@ const timedPricingTierSchema = z.object({
   marginalPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
   marginalDuration: z.number().int().positive(),
   marginalDurationUnit: z.enum(["minutes", "hours"]),
-  pinNumber: z.number().int().min(0).max(25),
+  // Relay behaviour for single-slot models; pinNumber is the legacy carrier.
+  action: slotActionSchema.optional(),
+  pinNumber: z.number().int().min(0).max(27).optional(),
 });
 
 const fixedPricingTierSchema = z.object({
@@ -120,7 +136,9 @@ const fixedPricingTierSchema = z.object({
   name: z.string().min(1).max(255),
   currencyCode: z.string().length(3),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/),
-  signals: z.array(offeringSignalSchema),
+  // Relay behaviour for single-slot models; signals is the legacy carrier.
+  action: slotActionSchema.optional(),
+  signals: z.array(offeringSignalSchema).optional(),
 });
 
 const pricingTierSchema = z.discriminatedUnion("type", [
@@ -177,6 +195,7 @@ export const vendorInstallationSlotCreateSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
   pricingTierId: z.string().min(1).optional(),
   pricingTier: pricingTierSchema.optional(),
+  action: slotActionSchema.nullable().optional(),
 });
 
 export const vendorInstallationSlotUpdateSchema = z.object({
@@ -186,6 +205,7 @@ export const vendorInstallationSlotUpdateSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
   pricingTierId: z.string().min(1).nullable().optional(),
   pricingTier: pricingTierSchema.nullable().optional(),
+  action: slotActionSchema.nullable().optional(),
 });
 
 export const vendorInstallationSlotBulkCreateSchema = z.object({

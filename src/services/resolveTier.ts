@@ -1,26 +1,59 @@
 import { eq } from "drizzle-orm";
-import type { OfferingType, PricingTier } from "@sudobility/tapayoka_types";
+import type {
+  OfferingType,
+  PricingTier,
+  SlotAction,
+} from "@sudobility/tapayoka_types";
 import { getDb } from "../db/index.ts";
 import {
   offerings,
   vendorInstallations,
+  vendorInstallationSlots,
   vendorOfferings,
 } from "../db/schema.ts";
 import {
-  tierAuthorizationFields,
+  slotAuthorizationFields,
   type TierAuthorizationFields,
 } from "./authorizationPayload.ts";
 
-/** Resolve the authorization fields for an order (new tier flow + legacy offerings fallback). */
+/**
+ * Resolve the authorization fields for an order.
+ *
+ * The relay behaviour ("action") is resolved as `slot.action ?? tier.action`:
+ * multi-slot models carry per-slot pins on the slot; single-slot models keep
+ * the action on the tier. The tier itself is the offering tier referenced by
+ * `pricingTierId`, or (for Unique slots) the slot's own embedded `pricingTier`.
+ * `authorizedSeconds` becomes the hold time for a timed action.
+ */
 export async function resolveTierForOrder(
   db: ReturnType<typeof getDb>,
   order: {
     offeringId?: string | null;
     pricingTierId: string | null;
     deviceWalletAddress: string;
+    slotId?: string | null;
+    authorizedSeconds?: number;
   }
 ): Promise<TierAuthorizationFields> {
-  if (order.pricingTierId) {
+  const seconds = order.authorizedSeconds ?? 0;
+
+  // Load the slot first — its action (multi-slot) and its embedded tier (Unique).
+  let slot: { action: SlotAction | null; pricingTier: unknown } | null = null;
+  if (order.slotId) {
+    const [row] = await db
+      .select()
+      .from(vendorInstallationSlots)
+      .where(eq(vendorInstallationSlots.id, order.slotId))
+      .limit(1);
+    slot = row
+      ? {
+          action: row.action as SlotAction | null,
+          pricingTier: row.pricingTier,
+        }
+      : null;
+  }
+
+  if (order.pricingTierId || slot) {
     const [installation] = await db
       .select()
       .from(vendorInstallations)
@@ -34,8 +67,15 @@ export async function resolveTierForOrder(
         .limit(1);
       if (offering) {
         const tiers = offering.pricingTiers as PricingTier[];
-        const tier = tiers.find(t => t.id === order.pricingTierId) ?? null;
-        if (tier) return tierAuthorizationFields(tier);
+        // Prefer the referenced offering tier (Tiered); fall back to the slot's
+        // own embedded tier (Unique).
+        const tier =
+          tiers.find(t => t.id === order.pricingTierId) ??
+          (slot?.pricingTier as PricingTier | undefined) ??
+          null;
+        if (tier || slot?.action) {
+          return slotAuthorizationFields(slot, tier, seconds);
+        }
       }
     }
   }

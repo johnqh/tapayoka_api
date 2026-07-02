@@ -58,7 +58,7 @@ buyerAuthorizations.post(
       return c.json(errorResponse("Authorization already exists"), 409);
     }
 
-    const { offeringType, signals } = await resolveTierForOrder(db, order);
+    const { offeringType, signals, end } = await resolveTierForOrder(db, order);
 
     // Build authorization payload
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -67,6 +67,7 @@ buyerAuthorizations.post(
       offeringType,
       seconds: order.authorizedSeconds,
       ...(signals ? { signals } : {}),
+      ...(end ? { end } : {}),
       nonce: randomUUID(),
       exp: Math.floor(expiresAt.getTime() / 1000),
     };

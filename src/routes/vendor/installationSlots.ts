@@ -20,6 +20,7 @@ import {
   errorResponse,
   type VendorInstallationSlot,
   type PricingTier,
+  type SlotAction,
   type DeleteResult,
 } from "@sudobility/tapayoka_types";
 import type { AppEnv } from "../../lib/hono-types.ts";
@@ -95,6 +96,7 @@ installationSlots.get("/installation/:walletAddress", async c => {
   const data: VendorInstallationSlot[] = results.map(r => ({
     ...r,
     pricingTier: r.pricingTier as PricingTier | null,
+    action: r.action as SlotAction | null,
   }));
   return c.json(successResponse(data));
 });
@@ -176,6 +178,7 @@ installationSlots.post(
     const responseData: VendorInstallationSlot = {
       ...slot,
       pricingTier: slot.pricingTier as PricingTier | null,
+      action: slot.action as SlotAction | null,
     };
     return c.json(successResponse(responseData), 201);
   }
@@ -246,6 +249,7 @@ installationSlots.post(
     const responseData: VendorInstallationSlot[] = slots.map(s => ({
       ...s,
       pricingTier: s.pricingTier as PricingTier | null,
+      action: s.action as SlotAction | null,
     }));
     return c.json(successResponse(responseData), 201);
   }
@@ -305,6 +309,7 @@ installationSlots.put(
     const updated: VendorInstallationSlot = {
       ...updatedRow,
       pricingTier: updatedRow.pricingTier as PricingTier | null,
+      action: updatedRow.action as SlotAction | null,
     };
     return c.json(successResponse(updated));
   }
