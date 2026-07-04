@@ -49,8 +49,10 @@ export const vendorModelTypeEnum = tapayoka.enum("vendor_model_type", [
   "Washer",
   "Dryer",
   "Parking",
+  "Charging",
   "Locker",
   "Vending",
+  "Tourist Binocular",
 ]);
 
 export const vendorModelPricingEnum = tapayoka.enum("vendor_model_pricing", [

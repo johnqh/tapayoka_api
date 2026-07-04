@@ -53,7 +53,15 @@ export async function initDatabase() {
     },
     {
       name: "tapayoka.vendor_model_type",
-      values: ["Washer", "Dryer", "Parking", "Locker", "Vending"],
+      values: [
+        "Washer",
+        "Dryer",
+        "Parking",
+        "Charging",
+        "Locker",
+        "Vending",
+        "Tourist Binocular",
+      ],
     },
   ];
 
@@ -279,6 +287,22 @@ export async function initDatabase() {
 
   // Add type column to vendor_models (nullable)
   await connection`ALTER TABLE tapayoka.vendor_models ADD COLUMN IF NOT EXISTS type tapayoka.vendor_model_type`;
+
+  // Add newer vendor_model_type values to existing databases (idempotent).
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'Charging' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_type ADD VALUE 'Charging';
+      END IF;
+    END $$;
+  `);
+  await connection.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'Tourist Binocular' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'vendor_model_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tapayoka'))) THEN
+        ALTER TYPE tapayoka.vendor_model_type ADD VALUE 'Tourist Binocular';
+      END IF;
+    END $$;
+  `);
 
   // Add enums and columns to vendor_models
   // Recreate pricing enum if it has old values (variableAtStart/variableAtEnd → timed)

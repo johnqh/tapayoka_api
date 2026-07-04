@@ -75,7 +75,17 @@ const dailyScheduleSchema = z.object({
 
 export const vendorModelCreateSchema = z.object({
   name: z.string().min(1).max(255),
-  type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
+  type: z
+    .enum([
+      "Washer",
+      "Dryer",
+      "Parking",
+      "Charging",
+      "Locker",
+      "Vending",
+      "Tourist Binocular",
+    ])
+    .optional(),
   pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
@@ -86,7 +96,17 @@ export const vendorModelCreateSchema = z.object({
 
 export const vendorModelUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  type: z.enum(["Washer", "Dryer", "Parking", "Locker", "Vending"]).optional(),
+  type: z
+    .enum([
+      "Washer",
+      "Dryer",
+      "Parking",
+      "Charging",
+      "Locker",
+      "Vending",
+      "Tourist Binocular",
+    ])
+    .optional(),
   pricing: z.enum(["fixed", "variable"]).optional(),
   slot: z.enum(["single", "multi1D", "multi2D"]).optional(),
   slotPricing: z.enum(["Tiered", "Unique"]).optional(),
