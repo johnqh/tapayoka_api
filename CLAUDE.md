@@ -1,5 +1,10 @@
 # tapayoka_api
 
+> **Git policy — never auto-commit or auto-push.** Leave your work in the working tree.
+> Run `git commit`, `git push`, `gh pr create`, or `scripts/push_all.sh` **only when the user
+> explicitly asks in that turn**. Approval for an earlier change does not carry forward, and
+> finishing a task is not permission to commit it.
+
 Backend API for Tapayoka QR-to-device cashless payment system. Hono + Bun + Drizzle + PostgreSQL.
 
 ## Stack
@@ -60,3 +65,7 @@ Device primary key is `wallet_address` (ETH address). Auto-initializes on startu
 - Role guard middleware enforces vendor/buyer role separation
 - ETH crypto: server signs authorizations, verifies device signatures
 - Drizzle ORM for type-safe queries, raw SQL for schema init
+
+## Git Workflow
+
+- Do not use feature branches for code changes. Always stay on the current branch.
