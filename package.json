@@ -10,15 +10,17 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "start:prod": "bun run dist/index.js",
-    "test": "vitest run tests/",
-    "test:watch": "vitest tests/",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "bunx eslint src",
     "typecheck": "bunx tsc --noEmit",
     "format": "bunx prettier --write src",
     "format:check": "bunx prettier --check src",
-    "db:migrate": "bun run src/db/migrate.ts"
+    "db:migrate": "bun run src/db/migrate.ts",
+    "test:db": "vitest run --config vitest.db.config.ts"
   },
   "devDependencies": {
+    "@sudobility/test-db-guard": "1.0.2",
     "@types/bun": "latest",
     "@types/node": "^24.10.1",
     "@typescript-eslint/eslint-plugin": "^8.50.0",

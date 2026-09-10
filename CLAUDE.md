@@ -24,7 +24,11 @@ bun install          # Install deps
 bun run dev          # Dev server with watch (port 3000)
 bun run start        # Production start
 bun run build        # Build for production
-bun run test         # Run tests (vitest)
+bun run test         # Unit tests, vitest. Never touches a database; this is what CI runs.
+bun run test:db      # Database tests (*.db.test.ts), vitest. MANUAL -- never run in CI.
+                     # Requires TEST_DATABASE_URL pointing at localhost.
+                     # This repo has no *.db.test.ts files yet, so it exits 1 with
+                     # "No test files found" -- expected, not a failure.
 bun run typecheck    # Type check
 bun run lint         # ESLint
 bun run db:migrate   # Run database migrations
@@ -53,7 +57,11 @@ Device primary key is `wallet_address` (ETH address). Auto-initializes on startu
 
 ## Key Environment Variables
 
-- `DATABASE_URL` — PostgreSQL connection string
+- `DATABASE_URL` — PostgreSQL connection string. **Application only.** Tests never
+  read it: `tests/setup.ts` deletes it outright, so a production URL exported in
+  your shell cannot reach a test.
+- `TEST_DATABASE_URL` — used by `bun run test:db` only. Must point at exactly
+  `localhost`; the guard refuses any other host, `127.0.0.1` included.
 - `SERVER_ETH_PRIVATE_KEY` — Server's Ethereum private key
 - `STRIPE_SECRET_KEY` — Stripe API key
 - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
