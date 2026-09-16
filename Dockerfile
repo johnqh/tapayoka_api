@@ -24,8 +24,15 @@ WORKDIR /app
 RUN groupadd -g 1001 appuser && \
     useradd -r -u 1001 -g appuser appuser
 
-# Copy package files first for better caching
-COPY package.json bun.lock* bunfig.toml ./
+# Copy package files first for better caching.
+#
+# Every one of these is optional except package.json, and the trailing `*` is
+# what says so: a COPY whose glob matches nothing succeeds, while a bare name
+# that is absent fails the build. `bunfig.toml` learned that the hard way — it
+# held only `[test] preload`, which is Bun test-runner config that never ran
+# because the test script is vitest, so it was deleted as dead config and this
+# line failed the image build on the next push.
+COPY package.json bun.lock* bunfig.toml* ./
 
 # Setup npm authentication for private packages
 RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc && \
